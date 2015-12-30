@@ -18,19 +18,21 @@ package at.bitfire.dav4android;
 
 import android.util.Log;
 
-import java.io.FilterInputStream;
 import java.io.FilterReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.Reader;
 
 /**
- * Simple class used for debugging only that affords us a view of the raw stream,
+ * Simple class used for debugging only that affords us a view of the raw WebDAV stream,
  * in addition to the tokenized version.
  *
  * Use of this class *MUST* be restricted to logging-enabled situations only.
  */
 public class LoggingReader extends FilterReader {
+    public static final String TAG = "LoggingReader";
+
+    public static final boolean VERBOSE_LOGGING = Log.isLoggable(TAG, Log.VERBOSE);
+
     private StringBuilder mSb;
     private boolean mDumpEmptyLines;
     private final String mTag;
@@ -44,7 +46,7 @@ public class LoggingReader extends FilterReader {
         mTag = tag + " ";
         mDumpEmptyLines = dumpEmptyLines;
         initBuffer();
-        Log.d("Logging", mTag + "dump start");
+        Log.d(TAG, mTag + "dump start");
     }
 
     private void initBuffer() {
@@ -98,7 +100,7 @@ public class LoggingReader extends FilterReader {
 
     private void flushLog() {
         if (mDumpEmptyLines || (mSb.length() > mTag.length())) {
-            Log.d("Logging", mSb.toString());
+            Log.d(TAG, mSb.toString());
             initBuffer();
         }
     }
