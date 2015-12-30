@@ -326,7 +326,7 @@ public class DavResource {
     protected void processMultiStatus(Reader reader) throws IOException, HttpException, DavException {
         XmlPullParser parser = XmlUtils.newPullParser();
         try {
-            if (BuildConfig.DEBUG || LoggingReader.VERBOSE_LOGGING) {
+            if (LoggingReader.VERBOSE_LOGGING) {
                 parser.setInput(new LoggingReader(reader));
             } else {
                 parser.setInput(reader);

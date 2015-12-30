@@ -29,7 +29,7 @@ import java.io.Reader;
  * Use of this class *MUST* be restricted to logging-enabled situations only.
  */
 public class LoggingReader extends FilterReader {
-    public static final String TAG = "LoggingReader";
+    public static final String TAG = "ContactsDAV";
 
     public static final boolean VERBOSE_LOGGING = Log.isLoggable(TAG, Log.VERBOSE);
 
