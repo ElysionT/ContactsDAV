@@ -13,9 +13,9 @@ import android.accounts.AccountManager;
 import android.annotation.SuppressLint;
 import android.app.Notification;
 import android.app.PendingIntent;
-import android.app.Service;
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
 import android.database.DatabaseUtils;
@@ -27,6 +27,7 @@ import android.provider.CalendarContract;
 import android.provider.ContactsContract;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.support.v4.app.JobIntentService;
 import android.support.v4.app.NotificationManagerCompat;
 import android.support.v7.app.NotificationCompat;
 import android.text.TextUtils;
@@ -68,21 +69,63 @@ import lombok.Cleanup;
 import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 
-public class DavService extends Service {
+public class DavService extends JobIntentService {
+
+    private static final int JOB_ID = 1000;
 
     public static final String
             ACTION_ACCOUNTS_UPDATED = "accountsUpdated",
             ACTION_REFRESH_COLLECTIONS = "refreshCollections",
             EXTRA_DAV_SERVICE_ID = "davServiceID";
 
-    private final IBinder binder = new InfoBinder();
+//    private final IBinder binder = new InfoBinder();
 
     private final Set<Long> runningRefresh = new HashSet<>();
     private final List<WeakReference<RefreshingStatusListener>> refreshingStatusListeners = new LinkedList<>();
 
+    public static void enqueueWork(Context context, Intent work) {
+        enqueueWork(context, DavService.class, JOB_ID, work);
+    }
+
+//    @Override
+//    public int onStartCommand(Intent intent, int flags, int startId) {
+//        System.out.println("DavService onStartCommand");
+//        if (intent != null) {
+//            String action = intent.getAction();
+//            long id = intent.getLongExtra(EXTRA_DAV_SERVICE_ID, -1);
+//
+//            switch (action) {
+//                case ACTION_ACCOUNTS_UPDATED:
+//                    cleanupAccounts();
+//                    break;
+//                case ACTION_REFRESH_COLLECTIONS:
+//                    if (runningRefresh.add(id)) {
+//                        new Thread(new RefreshCollections(id)).start();
+//                        for (WeakReference<RefreshingStatusListener> ref : refreshingStatusListeners) {
+//                            RefreshingStatusListener listener = ref.get();
+//                            if (listener != null)
+//                                listener.onDavRefreshStatusChanged(id, true);
+//                        }
+//                    }
+//                    break;
+//            }
+//        }
+//
+//        return START_NOT_STICKY;
+//    }
+
+
+    /* BOUND SERVICE PART
+       for communicating with the activities
+    */
+
+//    @Override
+//    public IBinder onBind(Intent intent) {
+//        return binder;
+//    }
 
     @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
+    protected void onHandleWork(@NonNull Intent intent) {
         if (intent != null) {
             String action = intent.getAction();
             long id = intent.getLongExtra(EXTRA_DAV_SERVICE_ID, -1);
@@ -103,18 +146,6 @@ public class DavService extends Service {
                     break;
             }
         }
-
-        return START_NOT_STICKY;
-    }
-
-
-    /* BOUND SERVICE PART
-       for communicating with the activities
-    */
-
-    @Override
-    public IBinder onBind(Intent intent) {
-        return binder;
     }
 
     public interface RefreshingStatusListener {

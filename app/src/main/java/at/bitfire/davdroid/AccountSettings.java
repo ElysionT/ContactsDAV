@@ -386,11 +386,11 @@ public class AccountSettings {
         refresh.setAction(DavService.ACTION_REFRESH_COLLECTIONS);
         if (serviceCardDAV != null) {
             refresh.putExtra(DavService.EXTRA_DAV_SERVICE_ID, serviceCardDAV);
-            context.startService(refresh);
+            DavService.enqueueWork(context, refresh);
         }
         if (serviceCalDAV != null) {
             refresh.putExtra(DavService.EXTRA_DAV_SERVICE_ID, serviceCalDAV);
-            context.startService(refresh);
+            DavService.enqueueWork(context, refresh);
         }
     }
 

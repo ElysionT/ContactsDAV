@@ -146,7 +146,7 @@ public class DetectConfigurationFragment extends DialogFragment implements Loade
 
                 // start CardDAV service detection (refresh collections)
                 refreshIntent.putExtra(DavService.EXTRA_DAV_SERVICE_ID, id);
-                getActivity().startService(refreshIntent);
+                DavService.enqueueWork(getActivity(), refreshIntent);
 
                 // initial CardDAV account settings
                 settings.setGroupMethod(GroupMethod.GROUP_VCARDS);
@@ -162,7 +162,7 @@ public class DetectConfigurationFragment extends DialogFragment implements Loade
 
                 // start CalDAV service detection (refresh collections)
                 refreshIntent.putExtra(DavService.EXTRA_DAV_SERVICE_ID, id);
-                getActivity().startService(refreshIntent);
+                DavService.enqueueWork(getActivity(), refreshIntent);
 
                 // enable calendar sync
                 ContentResolver.setIsSyncable(account, CalendarContract.AUTHORITY, 1);

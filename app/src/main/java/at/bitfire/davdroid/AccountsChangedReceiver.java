@@ -26,7 +26,7 @@ public class AccountsChangedReceiver extends BroadcastReceiver {
         if (AccountManager.LOGIN_ACCOUNTS_CHANGED_ACTION.equals(intent.getAction())) {
             Intent serviceIntent = new Intent(context, DavService.class);
             serviceIntent.setAction(DavService.ACTION_ACCOUNTS_UPDATED);
-            context.startService(serviceIntent);
+            DavService.enqueueWork(context, serviceIntent);
 
             for (OnAccountsUpdateListener listener : listeners)
                 listener.onAccountsUpdated(null);
