@@ -10,6 +10,7 @@ package at.bitfire.davdroid.ui;
 
 import android.accounts.Account;
 import android.accounts.AccountManager;
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.LoaderManager;
 import android.content.AsyncTaskLoader;
@@ -18,11 +19,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.Loader;
 import android.content.pm.PackageManager;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.CalendarContract;
 import android.provider.ContactsContract;
+import android.support.v4.content.FileProvider;
+import android.support.v7.app.AppCompatActivity;
 import android.text.TextUtils;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -35,31 +37,36 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Date;
+import java.util.logging.Level;
 
 import at.bitfire.dav4android.exception.HttpException;
-import at.bitfire.davdroid.BuildConfig;
+import at.bitfire.davdroid.AccountSettings;
+import at.bitfire.davdroid.App;
+import com.zui.davdroid.BuildConfig;
 import at.bitfire.davdroid.Constants;
-import at.bitfire.davdroid.R;
-import at.bitfire.davdroid.syncadapter.AccountSettings;
+import at.bitfire.davdroid.InvalidAccountException;
+import com.zui.davdroid.R;
+import at.bitfire.davdroid.model.ServiceDB;
+import lombok.Cleanup;
 
 public class DebugInfoActivity extends Activity implements LoaderManager.LoaderCallbacks<String> {
     public static final String
-            KEY_EXCEPTION = "exception",
+            KEY_THROWABLE = "throwable",
             KEY_LOGS = "logs",
             KEY_ACCOUNT = "account",
             KEY_AUTHORITY = "authority",
             KEY_PHASE = "phase";
 
-    private static final int MAX_INLINE_REPORT_LENGTH = 8000;
-
     TextView tvReport;
     String report;
+
+    File reportFile;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        setContentView(R.layout.debug_info_activity);
+        setContentView(R.layout.activity_debug_info);
         tvReport = (TextView)findViewById(R.id.text_report);
 
         getLoaderManager().initLoader(0, getIntent().getExtras(), this);
@@ -67,7 +74,7 @@ public class DebugInfoActivity extends Activity implements LoaderManager.LoaderC
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        getMenuInflater().inflate(R.menu.exception_details_activity, menu);
+        getMenuInflater().inflate(R.menu.activity_debug_info, menu);
         return true;
     }
 
@@ -77,31 +84,41 @@ public class DebugInfoActivity extends Activity implements LoaderManager.LoaderC
             Intent sendIntent = new Intent();
             sendIntent.setAction(Intent.ACTION_SEND);
             sendIntent.setType("text/plain");
-            sendIntent.putExtra(Intent.EXTRA_SUBJECT, "DAVdroid debug info");
+            sendIntent.putExtra(Intent.EXTRA_SUBJECT, getString(R.string.app_name) + " " + BuildConfig.VERSION_NAME + " debug info");
 
-            boolean inline = false;
+            // since Android 4.1, FileProvider permissions are handled in a useful way (using ClipData)
+            boolean asAttachment = Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN;
 
-            if (report.length() > MAX_INLINE_REPORT_LENGTH)
-                // report is too long for inline text, send it as an attachment
+            if (asAttachment)
                 try {
-                    File reportFile = File.createTempFile("davdroid-debug", ".txt", getExternalCacheDir());
-                    Constants.log.debug("Writing debug info to " + reportFile.getAbsolutePath());
+                    File debugInfoDir = new File(getCacheDir(), "debug-info");
+                    debugInfoDir.mkdir();
+
+                    reportFile = new File(debugInfoDir, "debug.txt");
+                    App.log.fine("Writing debug info to " + reportFile.getAbsolutePath());
                     FileWriter writer = new FileWriter(reportFile);
                     writer.write(report);
                     writer.close();
 
-                    sendIntent.putExtra(Intent.EXTRA_STREAM, Uri.fromFile(reportFile));
-                } catch (IOException e) {
-                    // let's hope the report is < 1 MB (Android IPC limit)
-                    inline = true;
-                }
-            else
-                inline = true;
+                    sendIntent.putExtra(Intent.EXTRA_STREAM, FileProvider.getUriForFile(this, getString(R.string.authority_log_provider), reportFile));
+                    sendIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
-            if (inline)
+                } catch(IOException e) {
+                    // creating an attachment failed, so send it inline
+                    asAttachment = false;
+
+                    StringBuilder builder = new StringBuilder();
+                    builder .append("Couldn't write debug info file:\n")
+                            .append(ExceptionUtils.getStackTrace(e))
+                            .append("\n\n")
+                            .append(report);
+                    report = builder.toString();
+                }
+
+            if (!asAttachment)
                 sendIntent.putExtra(Intent.EXTRA_TEXT, report);
 
-            startActivity(sendIntent);
+            startActivity(Intent.createChooser(sendIntent, null));
         }
     }
 
@@ -137,15 +154,16 @@ public class DebugInfoActivity extends Activity implements LoaderManager.LoaderC
         }
 
         @Override
+        @SuppressLint("MissingPermission")
         public String loadInBackground() {
-            Exception exception = null;
+            Throwable throwable = null;
             String  logs = null,
                     authority = null;
             Account account = null;
             int phase = -1;
 
             if (extras != null) {
-                exception = (Exception)extras.getSerializable(KEY_EXCEPTION);
+                throwable = (Throwable)extras.getSerializable(KEY_THROWABLE);
                 logs = extras.getString(KEY_LOGS);
                 account = extras.getParcelable(KEY_ACCOUNT);
                 authority = extras.getString(KEY_AUTHORITY);
@@ -157,29 +175,26 @@ public class DebugInfoActivity extends Activity implements LoaderManager.LoaderC
             // begin with most specific information
 
             if (phase != -1)
-                report.append("SYNCHRONIZATION INFO\nSynchronization phase: " + phase + "\n");
+                report.append("SYNCHRONIZATION INFO\nSynchronization phase: ").append(phase).append("\n");
             if (account != null)
-                report.append("Account name: " + account.name + "\n");
+                report.append("Account name: ").append(account.name).append("\n");
             if (authority != null)
-                report.append("Authority: " + authority + "\n\n");
+                report.append("Authority: ").append(authority).append("\n");
 
-            if (exception instanceof HttpException) {
-                HttpException http = (HttpException)exception;
+            if (throwable instanceof HttpException) {
+                HttpException http = (HttpException)throwable;
                 if (http.request != null)
-                    report.append("HTTP REQUEST:\n" + http.request + "\n\n");
+                    report.append("\nHTTP REQUEST:\n").append(http.request).append("\n\n");
                 if (http.response != null)
-                    report.append("HTTP RESPONSE:\n" + http.response + "\n\n");
+                    report.append("HTTP RESPONSE:\n").append(http.response).append("\n");
             }
 
-            if (exception != null) {
-                report.append("STACK TRACE:\n");
-                for (String stackTrace : ExceptionUtils.getRootCauseStackTrace(exception))
-                    report.append(stackTrace + "\n");
-                report.append("\n");
-            }
+            if (throwable != null)
+                report  .append("\nEXCEPTION:\n")
+                        .append(ExceptionUtils.getStackTrace(throwable));
 
             if (logs != null)
-                report.append("LOGS:\n" + logs + "\n");
+                report.append("\nLOGS:\n").append(logs).append("\n");
 
             try {
                 PackageManager pm = getContext().getPackageManager();
@@ -189,41 +204,51 @@ public class DebugInfoActivity extends Activity implements LoaderManager.LoaderC
                 boolean workaroundInstalled = false;
                 try {
                     workaroundInstalled = pm.getPackageInfo("at.bitfire.davdroid.jbworkaround", 0) != null;
-                } catch(PackageManager.NameNotFoundException e) {}
-                report.append(
-                        "SOFTWARE INFORMATION\n" +
-                                "DAVdroid version: " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ") " + new Date(BuildConfig.buildTime) + "\n" +
-                                "Installed from: " + installedFrom + "\n" +
-                                "JB Workaround installed: " + (workaroundInstalled ? "yes" : "no") + "\n\n"
-                );
+                } catch(PackageManager.NameNotFoundException ignored) {}
+                report.append("\nSOFTWARE INFORMATION\n" +
+                                "DAVdroid version: ").append(BuildConfig.VERSION_NAME).append(" (").append(BuildConfig.VERSION_CODE).append(") ").append(new Date(BuildConfig.buildTime)).append("\n")
+                                .append("Installed from: ").append(installedFrom).append("\n")
+                                .append("JB Workaround installed: ").append(workaroundInstalled ? "yes" : "no").append("\n\n");
             } catch(Exception ex) {
-                Constants.log.error("Couldn't get software information", ex);
+                App.log.log(Level.SEVERE, "Couldn't get software information", ex);
             }
 
             report.append(
                     "CONFIGURATION\n" +
-                            "System-wide synchronization: " + (ContentResolver.getMasterSyncAutomatically() ? "automatically" : "manually") + "\n"
-            );
+                    "System-wide synchronization: ").append(ContentResolver.getMasterSyncAutomatically() ? "automatically" : "manually").append("\n");
             AccountManager accountManager = AccountManager.get(getContext());
-            for (Account acct : accountManager.getAccountsByType(Constants.ACCOUNT_TYPE)) {
-                AccountSettings settings = new AccountSettings(getContext(), acct);
-                report.append(
-                        "Account: " + acct.name + "\n" +
-                                "  Address book sync. interval: " + syncStatus(settings, ContactsContract.AUTHORITY) + "\n" +
-                                "  Calendar     sync. interval: " + syncStatus(settings, CalendarContract.AUTHORITY) + "\n" +
-                                "  OpenTasks    sync. interval: " + syncStatus(settings, "org.dmfs.tasks") + "\n"
-                        );
-            }
+            for (Account acct : accountManager.getAccountsByType(Constants.DEFAULT_ACCOUNT_TYPE))
+                try {
+                    AccountSettings settings = new AccountSettings(getContext(), acct);
+                    report.append("Account: ").append(acct.name).append("\n" +
+                                  "  Address book sync. interval: ").append(syncStatus(settings, ContactsContract.AUTHORITY)).append("\n" +
+                                  "  Calendar     sync. interval: ").append(syncStatus(settings, CalendarContract.AUTHORITY)).append("\n" +
+                                  "  OpenTasks    sync. interval: ").append(syncStatus(settings, "com.zui.provider.tasks")).append("\n" +
+                                  "  WiFi only: ").append(settings.getSyncWifiOnly());
+                    if (settings.getSyncWifiOnlySSID() != null)
+                        report.append(", SSID: ").append(settings.getSyncWifiOnlySSID());
+                    report.append("\n  [CardDAV] Contact group method: ").append(settings.getGroupMethod())
+                          .append("\n  [CalDAV] Time range (past days): ").append(settings.getTimeRangePastDays())
+                          .append("\n           Manage calendar colors: ").append(settings.getManageCalendarColors())
+                          .append("\n");
+                } catch(InvalidAccountException e) {
+                    report.append(acct).append(" is invalid (unsupported settings version) or does not exist\n");
+                }
+            report.append("\n");
+
+            report.append("SQLITE DUMP\n");
+            @Cleanup ServiceDB.OpenHelper dbHelper = new ServiceDB.OpenHelper(getContext());
+            dbHelper.dump(report);
             report.append("\n");
 
             try {
                 report.append(
                         "SYSTEM INFORMATION\n" +
-                                "Android version: " + Build.VERSION.RELEASE + " (" + Build.DISPLAY + ")\n" +
-                                "Device: " + WordUtils.capitalize(Build.MANUFACTURER) + " " + Build.MODEL + " (" + Build.DEVICE + ")\n\n"
+                                "Android version: ").append(Build.VERSION.RELEASE).append(" (").append(Build.DISPLAY).append(")\n" +
+                                "Device: ").append(WordUtils.capitalize(Build.MANUFACTURER)).append(" ").append(Build.MODEL).append(" (").append(Build.DEVICE).append(")\n\n"
                 );
-            } catch (Exception ex) {
-                Constants.log.error("Couldn't get system details", ex);
+            } catch(Exception ex) {
+                App.log.log(Level.SEVERE, "Couldn't get system details", ex);
             }
 
             return report.toString();

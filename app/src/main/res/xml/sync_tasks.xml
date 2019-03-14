@@ -7,8 +7,8 @@
   -->
 
 <sync-adapter xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accountType="bitfire.at.davdroid"
-    android:contentAuthority="org.dmfs.tasks"
+    android:accountType="@string/default_carddav_account_type"
+    android:contentAuthority="com.zui.dav.tasks"
     android:allowParallelSyncs="true"
     android:supportsUploading="true"
     android:isAlwaysSyncable="true"

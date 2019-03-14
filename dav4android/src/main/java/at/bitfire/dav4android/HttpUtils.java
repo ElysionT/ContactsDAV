@@ -8,6 +8,8 @@
 
 package at.bitfire.dav4android;
 
+import org.apache.commons.lang3.StringUtils;
+
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -16,11 +18,16 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import lombok.RequiredArgsConstructor;
+import okhttp3.Response;
 
 public class HttpUtils {
 
-    private static final Pattern authSchemeWithParam = Pattern.compile("^([^ ]+) +(.*)$");
+    private static final Pattern authSchemeWithParam = Pattern.compile("^([^ \"]+) +(.*)$");
 
+    public static String[] listHeader(Response response, String name) {
+        String value = StringUtils.join(response.headers(name), ",");
+        return StringUtils.splitByWholeSeparator(value, ",");
+    }
 
     public static List<AuthScheme> parseWwwAuthenticate(String[] wwwAuths) {
         /* WWW-Authenticate  = "WWW-Authenticate" ":" 1#challenge
@@ -100,9 +107,9 @@ public class HttpUtils {
             }
         }
 
-        /*Constants.log.trace("Server authentication schemes: ");
+        Constants.log.finer("Server authentication schemes: ");
         for (AuthScheme scheme : schemes)
-            Constants.log.trace("  - " + scheme);*/
+            Constants.log.finer("  - " + scheme);
 
         return schemes;
     }
@@ -112,7 +119,10 @@ public class HttpUtils {
         Pattern nameValue = Pattern.compile("^([^=]+)=(.*)$");
 
         public final String name;
+
+        /** Map (name -> value) authentication parameters. Names are always lower-case. */
         public final Map<String, String> params = new HashMap<>();
+
         public final List<String> unnamedParams = new LinkedList<>();
 
         public void addRawParam(String authParam) {
@@ -127,7 +137,7 @@ public class HttpUtils {
                             .substring(1, len-1)
                             .replace("\\\"", "\"");
                 }
-                params.put(name, value);
+                params.put(name.toLowerCase(), value);
             } else
                 unnamedParams.add(authParam);
         }

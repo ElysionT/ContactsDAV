@@ -1,25 +1,30 @@
 package at.bitfire.dav4android.property;
 
-import android.util.Log;
-
-import com.squareup.okhttp.MediaType;
-
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.logging.Level;
 
 import at.bitfire.dav4android.Constants;
 import at.bitfire.dav4android.Property;
 import at.bitfire.dav4android.PropertyFactory;
 import at.bitfire.dav4android.XmlUtils;
+import okhttp3.MediaType;
 
 public class SupportedAddressData implements Property {
     public static final Property.Name NAME = new Property.Name(XmlUtils.NS_CARDDAV, "supported-address-data");
 
     public final Set<MediaType> types = new HashSet<>();
+
+    public boolean hasVCard4() {
+        for (MediaType type : types)
+            if ("text/vcard; version=4.0".equalsIgnoreCase(type.toString()))    // the literal string has been constructed exactly this way below
+                return true;
+        return false;
+    }
 
 
     public static class Factory implements PropertyFactory {
@@ -50,7 +55,7 @@ public class SupportedAddressData implements Property {
                     eventType = parser.next();
                 }
             } catch(XmlPullParserException|IOException e) {
-                Log.e(Constants.LOG_TAG, "Couldn't parse <resourcetype>", e);
+                Constants.log.log(Level.SEVERE, "Couldn't parse <resourcetype>", e);
                 return null;
             }
 

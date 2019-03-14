@@ -13,8 +13,6 @@
 package at.bitfire.ical4android;
 
 
-import android.util.Log;
-
 import net.fortuna.ical4j.data.CalendarBuilder;
 import net.fortuna.ical4j.data.CalendarParserFactory;
 import net.fortuna.ical4j.data.ParserException;
@@ -38,15 +36,13 @@ import java.io.StringReader;
 import java.net.URISyntaxException;
 import java.util.TimeZone;
 import java.util.UUID;
+import java.util.logging.Level;
 
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.Setter;
 
 
 public class iCalendar {
-    private static final String TAG = "DAVdroid.iCal";
-
     // static ical4j initialization
     static {
         CompatibilityHints.setHintEnabled(CompatibilityHints.KEY_RELAXED_UNFOLDING, true);
@@ -68,7 +64,7 @@ public class iCalendar {
     // time zone helpers
 
     protected static boolean isDateTime(DateProperty date) {
-        return date.getDate() instanceof DateTime;
+        return date != null && date.getDate() instanceof DateTime;
     }
 
     /**
@@ -118,8 +114,8 @@ public class iCalendar {
             VTimeZone timezone = (VTimeZone) cal.getComponent(VTimeZone.VTIMEZONE);
             if (timezone != null && timezone.getTimeZoneId() != null)
                 return timezone.getTimeZoneId().getValue();
-        } catch (IOException | ParserException e) {
-            Log.e(TAG, "Can't understand time zone definition", e);
+        } catch (IOException|ParserException e) {
+            Constants.log.log(Level.SEVERE, "Can't understand time zone definition", e);
         }
         return null;
     }

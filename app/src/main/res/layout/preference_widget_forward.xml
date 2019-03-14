@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- create [v1.1.7][20150120][yueww2] -->
+<!-- 修改箭头资源 [v1.1.10][20150123][yueww2] -->
+<ImageView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/forward"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:contentDescription="@null"
+    android:src="@drawable/preference_right_arrow" />

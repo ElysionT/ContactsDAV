@@ -1,5 +1,6 @@
 <!--
   ~ Copyright (c) 2013 – 2015 Ricki Hirner (bitfire web engineering).
+  ~ Copyright (c) 2015 – 2016 ZUK.
   ~ All rights reserved. This program and the accompanying materials
   ~ are made available under the terms of the GNU Public License v3.0
   ~ which accompanies this distribution, and is available at
@@ -12,23 +13,69 @@
         Base application theme, dependent on API level. This theme is replaced
         by AppBaseTheme from res/values-vXX/styles.xml on newer devices.
     -->
-    <style name="AppBaseTheme" parent="android:Theme.Holo.Light">
+    <style name="AppBaseTheme" parent="android:Theme.DeviceDefault.Light.DarkActionBar">
         <!--
             Theme customizations available in newer API levels can go in
             res/values-vXX/styles.xml, while customizations related to
             backward-compatibility can go here.
         -->
+        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
     <!-- Application theme. -->
     <style name="AppTheme" parent="AppBaseTheme">
         <!-- All customizations that are NOT specific to a particular API-level can go here. -->
+        <item name="android:actionMenuTextAppearance">@style/MenuTextStyle</item>
+        <item name="android:actionBarStyle">@style/AppActionBarStyle</item>
+        <!--<item name="android:background">@color/background_primary</item>-->
     </style>
+
+    <!-- preference theme. -->
+    <style name="PreferenceTheme" parent="AppBaseTheme">
+        <!-- All customizations that are NOT specific to a particular API-level can go here. -->
+        <item name="android:actionBarStyle">@style/PreferenceActionBarStyle</item>
+    </style>
+
 
     <style name="TextView.Heading" parent="AppTheme">
         <item name="android:padding">5dp</item>
         <item name="android:background">#7ca42b</item>
         <item name="android:textColor">#ffffff</item>
+    </style>
+
+    <style name="Common"/>
+
+    <style name="Common.EditText" parent="android:Widget.DeviceDefault.Light.EditText">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">40dp</item>
+        <item name="android:layout_marginTop">16dp</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColorHint">#cccccc</item>
+    </style>
+
+    <style name="EditTextStyle" parent="Common.EditText">
+        <item name="android:layout_marginTop">0dp</item>
+        <item name="android:background">@drawable/bg_login_edit_text</item>
+    </style>
+
+    <style name="MenuTextStyle">
+        <item name="android:textColor">@color/option_menu_text</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="PreferenceActionBarStyle" parent="android:Widget.DeviceDefault.Light.ActionBar">
+        <item name="android:titleTextStyle">@style/AppActionBarTitleStyle</item>
+        <item name="android:homeAsUpIndicator">@drawable/ic_home_up_indicator</item>
+    </style>
+
+    <style name="AppActionBarStyle" parent="PreferenceActionBarStyle">
+        <item name="android:displayOptions">homeAsUp|showCustom</item>
+    </style>
+
+    <style name="AppActionBarTitleStyle"
+           parent="android:TextAppearance.DeviceDefault.Widget.ActionBar.Title">
+        <item name="android:textColor">@color/color_action_bar_title</item>
     </style>
 
 </resources>

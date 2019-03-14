@@ -12,6 +12,7 @@ import android.content.ContentProviderOperation;
 import android.content.ContentValues;
 import android.os.RemoteException;
 import android.provider.CalendarContract.Events;
+import android.support.annotation.NonNull;
 
 import net.fortuna.ical4j.model.property.ProdId;
 
@@ -20,14 +21,13 @@ import org.dmfs.provider.tasks.TaskContract.Tasks;
 import java.io.FileNotFoundException;
 import java.text.ParseException;
 
-import at.bitfire.davdroid.BuildConfig;
+import com.zui.davdroid.BuildConfig;
 import at.bitfire.ical4android.AndroidTask;
 import at.bitfire.ical4android.AndroidTaskFactory;
 import at.bitfire.ical4android.AndroidTaskList;
 import at.bitfire.ical4android.CalendarStorageException;
 import at.bitfire.ical4android.Task;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.Setter;
 
 public class LocalTask extends AndroidTask implements LocalResource {

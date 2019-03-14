@@ -1,12 +1,13 @@
 apply plugin: 'com.android.library'
 
+
 android {
-    compileSdkVersion 23
-    buildToolsVersion "23.0.2"
+    compileSdkVersion 25
+    buildToolsVersion '25.0.2'
 
     defaultConfig {
-        minSdkVersion 9
-        targetSdkVersion 23
+        minSdkVersion 23
+        targetSdkVersion 25
     }
     buildTypes {
         release {
@@ -21,11 +22,11 @@ android {
     }
 }
 
-dependencies {
-    compile 'com.squareup.okhttp:okhttp:2.6.0'
-    compile 'com.squareup.okhttp:logging-interceptor:2.6.0'
-    provided 'org.projectlombok:lombok:1.16.6'
-    compile 'org.slf4j:slf4j-android:1.7.13'
 
-    androidTestCompile 'com.squareup.okhttp:mockwebserver:2.6.0'
+dependencies {
+    compile 'org.apache.commons:commons-lang3:3.4'
+    compile 'com.squareup.okhttp3:okhttp:3.5.0'
+    provided 'org.projectlombok:lombok:1.16.12'
+
+    compile project(':CommonDAV')
 }

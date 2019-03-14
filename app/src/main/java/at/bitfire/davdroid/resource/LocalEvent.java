@@ -15,17 +15,17 @@ import android.os.Build;
 import android.os.RemoteException;
 import android.provider.CalendarContract;
 import android.provider.CalendarContract.Events;
+import android.support.annotation.NonNull;
 
 import net.fortuna.ical4j.model.property.ProdId;
 
-import at.bitfire.davdroid.BuildConfig;
+import com.zui.davdroid.BuildConfig;
 import at.bitfire.ical4android.AndroidCalendar;
 import at.bitfire.ical4android.AndroidEvent;
 import at.bitfire.ical4android.AndroidEventFactory;
 import at.bitfire.ical4android.CalendarStorageException;
 import at.bitfire.ical4android.Event;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.Setter;
 
 @TargetApi(17)
@@ -40,6 +40,8 @@ public class LocalEvent extends AndroidEvent implements LocalResource {
 
     @Getter protected String fileName;
     @Getter @Setter protected String eTag;
+
+    public boolean weAreOrganizer = true;
 
     public LocalEvent(@NonNull AndroidCalendar calendar, Event event, String fileName, String eTag) {
         super(calendar, event);
@@ -66,6 +68,12 @@ public class LocalEvent extends AndroidEvent implements LocalResource {
         event.uid = values.getAsString(COLUMN_UID);
 
         event.sequence = values.getAsInteger(COLUMN_SEQUENCE);
+        if (Build.VERSION.SDK_INT >= 17)
+            weAreOrganizer = values.getAsInteger(Events.IS_ORGANIZER) != 0;
+        else {
+            String organizer = values.getAsString(Events.ORGANIZER);
+            weAreOrganizer = organizer == null || organizer.equals(calendar.account.name);
+        }
     }
 
     @Override

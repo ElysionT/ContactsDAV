@@ -1,5 +1,6 @@
 /*
  * Copyright © 2013 – 2015 Ricki Hirner (bitfire web engineering).
+ * Copyright © 2015 – 2016 ZUK.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the GNU Public License v3.0
  * which accompanies this distribution, and is available at
@@ -8,36 +9,35 @@
 
 package at.bitfire.davdroid.ui.settings;
 
-import android.accounts.Account;
-import android.app.Activity;
-import android.app.FragmentManager;
+import android.content.Intent;
 import android.os.Bundle;
+import android.view.MenuItem;
 
-import at.bitfire.davdroid.R;
+import com.zui.davdroid.R;
 
-public class AccountActivity extends Activity {
-	public static final String EXTRA_ACCOUNT = "account";
+import at.bitfire.davdroid.ui.BaseActivity;
 
-	@Override
-	protected void onCreate(Bundle savedInstanceState) {
-		super.onCreate(savedInstanceState);
+public class AccountActivity extends BaseActivity {
+    public final static String TAG_ACCOUNT_SETTINGS = "account_settings";
 
-		setContentView(R.layout.settings_account_activity);
-		getActionBar().setDisplayHomeAsUpEnabled(true);
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
 
-		final FragmentManager fm = getFragmentManager();
-		AccountFragment fragment = (AccountFragment)fm.findFragmentById(R.id.account_fragment);
-		if (fragment == null) {
-			fragment = new AccountFragment();
-			final Bundle args = new Bundle(1);
-			Account account = getIntent().getExtras().getParcelable(EXTRA_ACCOUNT);
-			args.putParcelable(AccountFragment.ARG_ACCOUNT, account);
-			fragment.setArguments(args);
+        getActionBar().setDisplayHomeAsUpEnabled(true);
+        setContentView(R.layout.settings_account_activity);
+    }
 
-			getFragmentManager().beginTransaction()
-				.add(R.id.account_fragment, fragment, SettingsActivity.TAG_ACCOUNT_SETTINGS)
-				.commit();
-		}
-	}
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+    }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        getFragmentManager().beginTransaction()
+                .add(R.id.account_fragment, new AccountFragment(), TAG_ACCOUNT_SETTINGS).commit();
+    }
 }

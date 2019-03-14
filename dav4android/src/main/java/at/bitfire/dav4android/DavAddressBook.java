@@ -8,21 +8,21 @@
 
 package at.bitfire.dav4android;
 
-import com.squareup.okhttp.HttpUrl;
-import com.squareup.okhttp.MediaType;
-import com.squareup.okhttp.OkHttpClient;
-import com.squareup.okhttp.Request;
-import com.squareup.okhttp.RequestBody;
-import com.squareup.okhttp.Response;
-
-import org.slf4j.Logger;
 import org.xmlpull.v1.XmlSerializer;
 
 import java.io.IOException;
+import java.io.Reader;
 import java.io.StringWriter;
 
 import at.bitfire.dav4android.exception.DavException;
 import at.bitfire.dav4android.exception.HttpException;
+import lombok.Cleanup;
+import okhttp3.HttpUrl;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 
 public class DavAddressBook extends DavResource {
 
@@ -30,8 +30,8 @@ public class DavAddressBook extends DavResource {
             MIME_VCARD3_UTF8 = MediaType.parse("text/vcard;charset=utf-8"),
             MIME_VCARD4 = MediaType.parse("text/vcard;version=4.0");
 
-    public DavAddressBook(Logger log, OkHttpClient httpClient, HttpUrl location) {
-        super(log, httpClient, location);
+    public DavAddressBook(OkHttpClient httpClient, HttpUrl location) {
+        super(httpClient, location);
     }
 
     public void addressbookQuery() throws IOException, HttpException, DavException {
@@ -56,20 +56,19 @@ public class DavAddressBook extends DavResource {
         serializer.endTag(XmlUtils.NS_CARDDAV, "addressbook-query");
         serializer.endDocument();
 
-        // redirects must not followed automatically (as it may rewrite REPORT requests to GET requests)
-        httpClient.setFollowRedirects(false);
-
         Response response = httpClient.newCall(new Request.Builder()
                 .url(location)
                 .method("REPORT", RequestBody.create(MIME_XML, writer.toString()))
                 .header("Depth", "1")
                 .build()).execute();
 
-        checkStatus(response);
+        checkStatus(response, false);
         assertMultiStatus(response);
 
         members.clear();
-        processMultiStatus(response.body().charStream());
+
+        @Cleanup Reader reader = response.body().charStream();
+        processMultiStatus(reader);
     }
 
     public void multiget(HttpUrl[] urls, boolean vCard4) throws IOException, HttpException, DavException {
@@ -105,20 +104,19 @@ public class DavAddressBook extends DavResource {
         serializer.endTag(XmlUtils.NS_CARDDAV, "addressbook-multiget");
         serializer.endDocument();
 
-        // redirects must not followed automatically (as it may rewrite REPORT requests to GET requests)
-        httpClient.setFollowRedirects(false);
-
         Response response = httpClient.newCall(new Request.Builder()
                 .url(location)
                 .method("REPORT", RequestBody.create(MIME_XML, writer.toString()))
                 .header("Depth", "0")       // "The request MUST include a Depth: 0 header [...]"
                 .build()).execute();
 
-        checkStatus(response);
+        checkStatus(response, false);
         assertMultiStatus(response);
 
         members.clear();
-        processMultiStatus(response.body().charStream());
+
+        @Cleanup Reader reader = response.body().charStream();
+        processMultiStatus(reader);
     }
 
 }

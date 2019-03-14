@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--   ~ Copyright (c) 2013 – 2015 Ricki Hirner (bitfire web engineering).   ~ Copyright (c) 2015 – 2016 ZUK.   ~ All rights reserved. This program and the accompanying materials   ~ are made available under the terms of the GNU Public License v3.0   ~ which accompanies this distribution, and is available at   ~ http://www.gnu.org/licenses/gpl.html   -->
+
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- common strings -->
+    <string name="help">Guida</string>
+    <string name="next">Avanti</string>
+    <string name="please_wait">Attendi...</string>
+    <string name="send">Invia</string>
+    <string name="skip">Ignora</string>
+
+  <!--global settings-->
+  <string name="logging_davdroid_file_logging">Invio del log di DAVdroid su file</string>
+  <string name="logging_to_external_storage">Log su dispositivo esterno: %s</string>
+  <string name="logging_to_external_storage_warning">Cancellare prima possibile i file di log!</string>
+  <string name="logging_couldnt_create_file">Non riesco a creare il file di log esterno: %s</string>
+  <string name="logging_no_external_storage">Dispositivo esterno non disponibile</string>
+
+  <!--DavService-->
+  <string name="dav_service_refresh_failed">Fallita l\'individuazione dei servizi</string>
+  <string name="dav_service_refresh_couldnt_refresh">Impossibile rinnovare la lista delle collezioni</string>
+
+    <!-- AddAccountActivity -->
+    <string name="login_user_name">Nome utente</string>
+    <string name="login_password">Password</string>
+
+    <string name="login_server_name_hint">Server my.webhost.com</string>
+    <string name="login_account_description_hint">Descrizione</string>
+    <string name="login_label">Login</string>
+    <!-- Settings activity -->
+    <string name="settings_title">Impostazioni</string>
+    <string name="settings_authentication">Autenticazione</string>
+    <string name="settings_username">Nome utente</string>
+    <string name="settings_enter_username">Inserisci nome utente:</string>
+    <string name="settings_password">Password</string>
+    <string name="settings_password_summary">Aggiorna la password secondo il tuo server.</string>
+    <string name="settings_enter_password">Inserisci la password:</string>
+    <string name="settings_sync">Sincronizzazione</string>
+    <string name="settings_sync_interval_contacts">Intervallo sinc. contatti</string>
+    <string name="settings_sync_summary_manually">Solo manualmente</string>
+    <string name="settings_sync_summary_periodically" tools:ignore="PluralsCandidate">Ogni %d minuti + subito in caso di modifiche locali</string>
+    <string name="settings_sync_summary_not_available">Non disponibile</string>
+    <string-array name="settings_sync_interval_seconds">
+        <item>-1</item>
+        <item>3600</item>
+        <item>7200</item>
+        <item>14400</item>
+        <item>86400</item>
+    </string-array>
+    <string-array name="settings_sync_interval_names">
+        <item>Solo manualmente</item>
+        <item>Ogni ora</item>
+        <item>Ogni 2 ore</item>
+        <item>Ogni 4 ore</item>
+        <item>Una volta al giorno</item>
+    </string-array>
+    <string name="settings_debug">Debug...</string>
+    <string name="settings_security_warning">Potenziale rischio per la sicurezza.</string>
+    <string name="settings_log_to_external_file">Registra in file esterno</string>
+    <string name="settings_log_to_external_file_confirmation">I file di registro esterni contengono dati privati accessibili da altre app. Disattiva la registrazione esterna ed elimina i file di registro dopo l\'uso.</string>
+    <string name="settings_log_to_external_file_on">I registri vengono scritti su %s (se possibile)</string>
+    <string name="settings_log_to_external_file_no_external_storage">Archivio esterno non disponibile</string>
+    <string name="settings_log_to_external_file_off">I registri vengono scritti su ADB</string>
+    <string name="settings_log_verbose">Registrazione dettagliata</string>
+    <string name="settings_log_verbose_on">Registra informazioni su sincronizzazione e traffico di rete</string>
+    <string name="settings_log_verbose_off">Registra solo informazioni su sincronizzazione</string>
+
+    <string name="setup_login_failed">Accesso non riuscito</string>
+    <string name="setup_login_network_error">Controlla la connessione di rete.</string>
+    <string name="setup_login_icloud_info_error">Controlla l\'ID Apple e la password.</string>
+    <string name="setup_login_icloud_info_error_for_two_step">Controlla l\'ID Apple e la password!\n\nSe hai abilitato la Verifica in DUE FASI , controlla di avere creato e inserito <a href="https://support.apple.com/en-us/HT204397">PASSWORD SPECIFICHE PER L\'APP</a>. Apri <a href="https://appleid.apple.com">la pagina account ID Apple</a> per creare delle PASSWORD SPECIFICHE PER LE APP.</string>
+    <string name="setup_dialog_retry">Riprova</string>
+    <string name="setup_add_account">Aggiungi account</string>
+    <string name="setup_querying_server_icloud">Caricamento iCloud. Attendi...</string>
+    <string name="setup_querying_server_carddav">Caricamento CardDAV. Attendi...</string>
+
+    <!-- sync errors and DebugInfoActivity -->
+    <string name="debug_info_title">Info su debug</string>
+    <string name="sync_error_calendar">Sincronizzazione calendario non riuscita (%s)</string>
+    <string name="sync_error_contacts">Sincronizzazione rubrica non riuscita (%s)</string>
+    <string name="sync_error_tasks">Sincronizzazione delle attività fallita (%s)</string>
+    <string name="sync_error">Errore durante %s</string>
+    <string name="sync_error_http_dav">Errore server durante %s</string>
+    <string name="sync_error_local_storage">Errore database durante %s</string>
+    <string-array name="sync_error_phases">
+        <item>preparazione sincronizzazione</item>
+        <item>capacità di query</item>
+        <item>elaborazione voci eliminate localmente</item>
+        <item>preparazione voci create/modificate</item>
+        <item>caricamento voci create/modificate</item>
+        <item>verifica stato sincronizzazione</item>
+        <item>elenco voci locali</item>
+        <item>elenco voci remote</item>
+        <item>confronto voci locali/remote</item>
+        <item>download voci remote</item>
+        <item>salvataggio stato sincronizzazione</item>
+    </string-array>
+    <string name="sync_error_unauthorized">Nome utente/password errati</string>
+
+    <string name="login_account_not_created">Account non può essere creato, non è possibile avere due account con lo stesso nome.</string>
+
+</resources>

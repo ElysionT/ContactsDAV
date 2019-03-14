@@ -12,8 +12,6 @@
 
 package at.bitfire.ical4android;
 
-import android.util.Log;
-
 import net.fortuna.ical4j.data.CalendarBuilder;
 import net.fortuna.ical4j.data.ParserException;
 import net.fortuna.ical4j.model.Calendar;
@@ -38,10 +36,9 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.SimpleTimeZone;
+import java.util.logging.Level;
 
 public class DateUtils {
-    private final static String TAG = "ical4android.DateUtils";
-
     public final static TimeZoneRegistry tzRegistry = TimeZoneRegistryFactory.getInstance().createRegistry();
 
     static {
@@ -68,7 +65,7 @@ public class DateUtils {
             for (String availableTZ : availableTZs)
                 if (StringUtils.indexOfIgnoreCase(tzID, availableTZ) != -1) {
                     deviceTZ = availableTZ;
-                    Log.w(TAG, "Couldn't find system time zone \"" + tzID + "\", assuming " + deviceTZ);
+                    Constants.log.warning("Couldn't find system time zone \"" + tzID + "\", assuming " + deviceTZ);
                     break;
                 }
         }
@@ -76,7 +73,7 @@ public class DateUtils {
         // if that doesn't work, use UTC as fallback
         if (deviceTZ == null) {
             final String defaultTZ = TimeZone.getDefault().getID();
-            Log.w(TAG, "Couldn't find system time zone \"" + tzID +"\", using system default (" + defaultTZ + ") as fallback");
+            Constants.log.warning("Couldn't find system time zone \"" + tzID + "\", using system default (" + defaultTZ + ") as fallback");
             deviceTZ = defaultTZ;
         }
 
@@ -89,7 +86,7 @@ public class DateUtils {
             Calendar cal = builder.build(new StringReader(timezoneDef));
             return (VTimeZone)cal.getComponent(VTimeZone.VTIMEZONE);
         } catch (IOException|ParserException e) {
-            Constants.log.warn("Couldn't parse timezone definition");
+            Constants.log.warning("Couldn't parse timezone definition");
             return null;
         }
     }
@@ -112,10 +109,10 @@ public class DateUtils {
     public static String recurrenceSetsToAndroidString(List<? extends DateListProperty> dates, boolean allDay) throws ParseException {
         List<String> strDates = new LinkedList<>();
 
-		/*        rdate/exdate: DATE                                DATE_TIME
-		    all-day             store as ...T000000Z                cut off time and store as ...T000000Z
-		    event with time     (ignored)                           store as ...ThhmmssZ
-		*/
+        /*  rdate/exdate:       DATE                                DATE_TIME
+            all-day             store as ...T000000Z                cut off time and store as ...T000000Z
+            event with time     (ignored)                           store as ...ThhmmssZ
+        */
         final DateFormat dateFormatUtcMidnight = new SimpleDateFormat("yyyyMMdd'T'000000'Z'", Locale.US);
 
         for (DateListProperty dateListProp : dates) {
@@ -124,7 +121,7 @@ public class DateUtils {
             if (Value.DATE_TIME.equals(type)) {         // DATE-TIME values will be stored in UTC format for Android
                 if (allDay) {
                     DateList dateList = dateListProp.getDates();
-                    for (Date date : (Iterable<Date>)dateList)
+                    for (Date date : dateList)
                         strDates.add(dateFormatUtcMidnight.format(date));
                 } else {
                     dateListProp.setUtc(true);
@@ -132,7 +129,7 @@ public class DateUtils {
                 }
 
             } else if (Value.DATE.equals(type))       // DATE values have to be converted to DATE-TIME <date>T000000Z for Android
-                for (Date date : (Iterable<Date>)dateListProp.getDates())
+                for (Date date : dateListProp.getDates())
                     strDates.add(dateFormatUtcMidnight.format(date));
         }
         return StringUtils.join(strDates, ",");

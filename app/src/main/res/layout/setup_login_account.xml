@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ Copyright (c) 2015 – 2016 ZUK.
+  ~ All rights reserved. This program and the accompanying materials
+  ~ are made available under the terms of the GNU Public License v3.0
+  ~ which accompanies this distribution, and is available at
+  ~ http://www.gnu.org/licenses/gpl.html
+  -->
+
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              xmlns:tools="http://schemas.android.com/tools"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:layout_marginLeft="16dp"
+              android:layout_marginRight="16dp"
+              android:orientation="vertical">
+
+    <LinearLayout
+        android:id="@+id/login_icloud"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="78dp"
+            android:layout_height="78dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="42dp"
+            android:layout_marginTop="32dp"
+            android:src="@drawable/ic_login_icloud_account"/>
+
+        <EditText
+            android:id="@+id/apple_id"
+            style="@style/EditTextStyle"
+            android:hint="@string/login_apple_id_label"
+            android:inputType="textNoSuggestions|textEmailAddress"/>.
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp">
+
+            <EditText
+                android:id="@+id/icloud_password"
+                style="@style/EditTextStyle"
+                android:layout_marginTop="0dp"
+                android:hint="@string/login_password"
+                android:inputType="textPassword"
+                android:maxLength="30"/>
+
+            <Button
+                android:id="@+id/show_password"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_alignRight="@id/icloud_password"
+                android:layout_centerVertical="true"
+                android:layout_marginRight="4dp"
+                android:background="@drawable/ic_show_password_disable"/>
+
+        </RelativeLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/login_mi"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="78dp"
+            android:layout_height="78dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="42dp"
+            android:layout_marginTop="32dp"
+            android:src="@drawable/ic_login_mi_account"/>
+
+        <EditText
+            android:id="@+id/mi_id"
+            style="@style/EditTextStyle"
+            android:hint="@string/login_mi_id_label"
+            android:inputType="textNoSuggestions|textEmailAddress"/>.
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp">
+
+            <EditText
+                android:id="@+id/mi_password"
+                style="@style/EditTextStyle"
+                android:layout_marginTop="0dp"
+                android:hint="@string/login_password"
+                android:inputType="textPassword"
+                android:maxLength="30"/>
+
+            <Button
+                android:id="@id/show_password"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_alignRight="@id/mi_password"
+                android:layout_centerVertical="true"
+                android:layout_marginRight="4dp"
+                android:background="@drawable/ic_show_password_disable"/>
+
+        </RelativeLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/login_url"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="78dp"
+            android:layout_height="78dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="42dp"
+            android:layout_marginTop="32dp"
+            android:src="@drawable/ic_login_carddav_account"/>
+
+        <EditText
+            android:id="@+id/login_host_path"
+            style="@style/EditTextStyle"
+            android:hint="@string/login_server_name_hint"
+            android:imeOptions="flagForceAscii|actionNext"
+            android:inputType="textUri"
+            tools:ignore="HardcodedText"/>
+
+        <EditText
+            android:id="@+id/userName"
+            style="@style/Common.EditText"
+            android:hint="@string/login_user_name"
+            android:inputType="textNoSuggestions|textEmailAddress"/>
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp">
+
+            <EditText
+                android:id="@+id/password"
+                style="@style/EditTextStyle"
+                android:layout_marginTop="0dp"
+                android:hint="@string/login_password"
+                android:inputType="textPassword"
+                android:maxLength="30"/>
+
+            <Button
+                android:id="@id/show_password"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_alignRight="@id/password"
+                android:layout_centerVertical="true"
+                android:layout_marginRight="4dp"
+                android:background="@drawable/ic_show_password_disable"/>
+
+        </RelativeLayout>
+
+        <EditText
+            android:id="@+id/description"
+            style="@style/Common.EditText"
+            android:layout_height="100dp"
+            android:gravity="left|top"
+            android:hint="@string/login_account_description_hint"
+            android:paddingTop="6dp"
+            android:inputType="textMultiLine"/>
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/login"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="30dp"
+        android:background="@drawable/ic_login_disable"
+        android:enabled="false"
+        android:text="@string/login_label"
+        android:textColor="@color/color_primary_button_text_disable"
+        android:textSize="15sp"/>
+
+</LinearLayout>

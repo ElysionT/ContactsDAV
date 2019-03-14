@@ -8,18 +8,16 @@
 
 package at.bitfire.dav4android.property;
 
-import android.text.TextUtils;
-import android.util.Log;
-
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.IOException;
+import java.util.logging.Level;
 
 import at.bitfire.dav4android.Constants;
 import at.bitfire.dav4android.Property;
 import at.bitfire.dav4android.PropertyFactory;
-import at.bitfire.dav4android.StringUtils;
+import at.bitfire.dav4android.QuotedStringUtils;
 import at.bitfire.dav4android.XmlUtils;
 import lombok.ToString;
 
@@ -43,7 +41,7 @@ public class GetETag implements Property {
             // entity tag is weak (doesn't matter for us)
             rawETag = rawETag.substring(2);
 
-        eTag = StringUtils.decodeQuotedString(rawETag);
+        eTag = QuotedStringUtils.decodeQuotedString(rawETag);
     }
 
 
@@ -60,7 +58,7 @@ public class GetETag implements Property {
             try {
                 return new GetETag(parser.nextText());
             } catch(XmlPullParserException|IOException e) {
-                Constants.log.error("Couldn't parse <getetag>", e);
+                Constants.log.log(Level.SEVERE, "Couldn't parse <getetag>", e);
                 return null;
             }
         }

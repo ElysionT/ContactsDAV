@@ -9,23 +9,29 @@
 package at.bitfire.davdroid.resource;
 
 import android.accounts.Account;
+import android.content.ContentProviderClient;
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
 import android.os.RemoteException;
+import android.support.annotation.NonNull;
+import android.text.TextUtils;
 
 import org.dmfs.provider.tasks.TaskContract.TaskLists;
 import org.dmfs.provider.tasks.TaskContract.Tasks;
 
 import java.io.FileNotFoundException;
 
+import at.bitfire.davdroid.DavUtils;
+import at.bitfire.davdroid.model.CollectionInfo;
 import at.bitfire.ical4android.AndroidTaskList;
 import at.bitfire.ical4android.AndroidTaskListFactory;
 import at.bitfire.ical4android.CalendarStorageException;
 import at.bitfire.ical4android.TaskProvider;
 import lombok.Cleanup;
-import lombok.NonNull;
 
 public class LocalTaskList extends AndroidTaskList implements LocalCollection {
 
@@ -39,9 +45,6 @@ public class LocalTaskList extends AndroidTaskList implements LocalCollection {
             LocalTask.COLUMN_ETAG
     };
 
-    // can be cached, because after installing OpenTasks, you have to re-install DAVdroid anyway
-    private static Boolean tasksProviderAvailable;
-
 
     @Override
     protected String[] taskBaseInfoColumns() {
@@ -53,20 +56,27 @@ public class LocalTaskList extends AndroidTaskList implements LocalCollection {
         super(account, provider, LocalTask.Factory.INSTANCE, id);
     }
 
-    public static Uri create(Account account, ContentResolver resolver, ServerInfo.ResourceInfo info) throws CalendarStorageException {
-        TaskProvider provider = TaskProvider.acquire(resolver, TaskProvider.ProviderName.OpenTasks);
-        if (provider == null)
-            throw new CalendarStorageException("Couldn't access OpenTasks provider");
-
-        ContentValues values = new ContentValues();
-        values.put(TaskLists._SYNC_ID, info.getUrl());
-        values.put(TaskLists.LIST_NAME, info.getTitle());
-        values.put(TaskLists.LIST_COLOR, info.color != null ? info.color : defaultColor);
+    public static Uri create(Account account, TaskProvider provider, CollectionInfo info) throws CalendarStorageException {
+        ContentValues values = valuesFromCollectionInfo(info, true);
         values.put(TaskLists.OWNER, account.name);
         values.put(TaskLists.SYNC_ENABLED, 1);
         values.put(TaskLists.VISIBLE, 1);
-
         return create(account, provider, values);
+    }
+
+    public void update(CollectionInfo info, boolean updateColor) throws CalendarStorageException {
+        update(valuesFromCollectionInfo(info, updateColor));
+    }
+
+    private static ContentValues valuesFromCollectionInfo(CollectionInfo info, boolean withColor) {
+        ContentValues values = new ContentValues();
+        values.put(TaskLists._SYNC_ID, info.url);
+        values.put(TaskLists.LIST_NAME, !TextUtils.isEmpty(info.displayName) ? info.displayName : DavUtils.lastSegmentOfUrl(info.url));
+
+        if (withColor)
+            values.put(TaskLists.LIST_COLOR, info.color != null ? info.color : defaultColor);
+
+        return values;
     }
 
 
@@ -126,12 +136,12 @@ public class LocalTaskList extends AndroidTaskList implements LocalCollection {
 
     // helpers
 
-    public static boolean tasksProviderAvailable(@NonNull ContentResolver resolver) {
-        if (tasksProviderAvailable != null)
-            return tasksProviderAvailable;
+    public static boolean tasksProviderAvailable(@NonNull Context context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+            return context.getPackageManager().resolveContentProvider(TaskProvider.ProviderName.OpenTasks.authority, 0) != null;
         else {
-            TaskProvider provider = TaskProvider.acquire(resolver, TaskProvider.ProviderName.OpenTasks);
-            return tasksProviderAvailable = (provider != null);
+            @Cleanup TaskProvider provider = TaskProvider.acquire(context.getContentResolver(), TaskProvider.ProviderName.OpenTasks);
+            return provider != null;
         }
     }
 
@@ -149,4 +159,17 @@ public class LocalTaskList extends AndroidTaskList implements LocalCollection {
             return new LocalTaskList[size];
         }
     }
+
+
+    // HELPERS
+
+    public static void onRenameAccount(@NonNull ContentResolver resolver, @NonNull String oldName, @NonNull String newName) throws RemoteException {
+        @Cleanup("release") ContentProviderClient client = resolver.acquireContentProviderClient(TaskProvider.ProviderName.OpenTasks.authority);
+        if (client != null) {
+            ContentValues values = new ContentValues(1);
+            values.put(Tasks.ACCOUNT_NAME, newName);
+            client.update(Tasks.getContentUri(TaskProvider.ProviderName.OpenTasks.authority), values, Tasks.ACCOUNT_NAME + "=?", new String[]{oldName});
+        }
+    }
+
 }

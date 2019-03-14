@@ -11,9 +11,10 @@
     
     <PreferenceScreen android:title="@string/settings_title">
         <intent
-            android:targetPackage="at.bitfire.davdroid"
-            android:targetClass="at.bitfire.davdroid.ui.settings.SettingsActivity"
-            android:action="ACTION_VIEW" />
+            android:targetPackage="com.zui.davdroid"
+            android:targetClass="at.bitfire.davdroid.ui.settings.AccountActivity"
+            android:data="@string/default_carddav_account_type"
+            android:action="davdroid.intent.action.ACCOUNT_SETTINGS" />
     </PreferenceScreen>
 
 </PreferenceScreen>

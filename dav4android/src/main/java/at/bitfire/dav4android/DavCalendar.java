@@ -8,32 +8,38 @@
 
 package at.bitfire.dav4android;
 
-import com.squareup.okhttp.HttpUrl;
-import com.squareup.okhttp.MediaType;
-import com.squareup.okhttp.OkHttpClient;
-import com.squareup.okhttp.Request;
-import com.squareup.okhttp.RequestBody;
-import com.squareup.okhttp.Response;
-
-import org.slf4j.Logger;
 import org.xmlpull.v1.XmlSerializer;
 
 import java.io.IOException;
+import java.io.Reader;
 import java.io.StringWriter;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 import at.bitfire.dav4android.exception.DavException;
 import at.bitfire.dav4android.exception.HttpException;
+import lombok.Cleanup;
+import okhttp3.HttpUrl;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 
 public class DavCalendar extends DavResource {
 
     public static final MediaType
             MIME_ICALENDAR = MediaType.parse("text/calendar;charset=utf-8");
 
-    public DavCalendar(Logger log, OkHttpClient httpClient, HttpUrl location) {
-        super(log, httpClient, location);
+    protected static final SimpleDateFormat timeFormatUTC = new SimpleDateFormat("yyyyMMdd'T'HHmmss'Z'", Locale.US);
+
+
+    public DavCalendar(OkHttpClient httpClient, HttpUrl location) {
+        super(httpClient, location);
     }
 
-    public void calendarQuery(String component) throws IOException, HttpException, DavException {
+    public void calendarQuery(String component, Date start, Date end) throws IOException, HttpException, DavException {
         /* <!ELEMENT calendar-query ((DAV:allprop |
                                       DAV:propname |
                                       DAV:prop)?, filter, timezone?)>
@@ -55,20 +61,25 @@ public class DavCalendar extends DavResource {
             serializer.startTag(XmlUtils.NS_WEBDAV, "prop");
                 serializer.startTag(XmlUtils.NS_WEBDAV, "getetag");
                 serializer.endTag(XmlUtils.NS_WEBDAV, "getetag");
-            serializer.endTag(XmlUtils.NS_WEBDAV,   "prop");
+            serializer.endTag(XmlUtils.NS_WEBDAV, "prop");
             serializer.startTag(XmlUtils.NS_CALDAV, "filter");
                 serializer.startTag(XmlUtils.NS_CALDAV, "comp-filter");
                 serializer.attribute(null, "name", "VCALENDAR");
                     serializer.startTag(XmlUtils.NS_CALDAV, "comp-filter");
                     serializer.attribute(null, "name", component);
+                    if (start != null || end != null) {
+                        serializer.startTag(XmlUtils.NS_CALDAV, "time-range");
+                        if (start != null)
+                            serializer.attribute(null, "start", timeFormatUTC.format(start));
+                        if (end != null)
+                            serializer.attribute(null, "end", timeFormatUTC.format(end));
+                        serializer.endTag(XmlUtils.NS_CALDAV, "time-range");
+                    }
                     serializer.endTag(XmlUtils.NS_CALDAV, "comp-filter");
-                serializer.endTag(XmlUtils.NS_CALDAV,   "comp-filter");
-            serializer.endTag(XmlUtils.NS_CALDAV,   "filter");
-        serializer.endTag(XmlUtils.NS_CALDAV,   "calendar-query");
+                serializer.endTag(XmlUtils.NS_CALDAV, "comp-filter");
+            serializer.endTag(XmlUtils.NS_CALDAV, "filter");
+        serializer.endTag(XmlUtils.NS_CALDAV, "calendar-query");
         serializer.endDocument();
-
-        // redirects must not followed automatically (as it may rewrite REPORT requests to GET requests)
-        httpClient.setFollowRedirects(false);
 
         Response response = httpClient.newCall(new Request.Builder()
                 .url(location)
@@ -76,11 +87,13 @@ public class DavCalendar extends DavResource {
                 .header("Depth", "1")
                 .build()).execute();
 
-        checkStatus(response);
+        checkStatus(response, false);
         assertMultiStatus(response);
 
         members.clear();
-        processMultiStatus(response.body().charStream());
+
+        @Cleanup Reader reader = response.body().charStream();
+        processMultiStatus(reader);
     }
 
     public void multiget(HttpUrl[] urls) throws IOException, HttpException, DavException {
@@ -111,19 +124,18 @@ public class DavCalendar extends DavResource {
         serializer.endTag(XmlUtils.NS_CALDAV, "calendar-multiget");
         serializer.endDocument();
 
-        // redirects must not followed automatically (as it may rewrite REPORT requests to GET requests)
-        httpClient.setFollowRedirects(false);
-
         Response response = httpClient.newCall(new Request.Builder()
                 .url(location)
                 .method("REPORT", RequestBody.create(MIME_XML, writer.toString()))
                 .build()).execute();
 
-        checkStatus(response);
+        checkStatus(response, false);
         assertMultiStatus(response);
 
         members.clear();
-        processMultiStatus(response.body().charStream());
+
+        @Cleanup Reader reader = response.body().charStream();
+        processMultiStatus(reader);
     }
 
 }

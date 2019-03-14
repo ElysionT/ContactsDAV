@@ -15,19 +15,17 @@ package at.bitfire.ical4android;
 import android.content.ContentProviderClient;
 import android.content.ContentResolver;
 import android.net.Uri;
-import android.util.Log;
 
 import org.dmfs.provider.tasks.TaskContract;
 
 import java.io.Closeable;
-import java.io.IOException;
+import java.util.logging.Level;
 
 public class TaskProvider implements Closeable {
-    private static final String TAG = "ical4and.TaskProvider";
 
     public enum ProviderName {
         //Mirakel("de.azapps.mirakel.provider"),
-        OpenTasks("org.dmfs.tasks");
+        OpenTasks("com.zui.dav.tasks");
 
         public final String authority;
 
@@ -62,6 +60,9 @@ public class TaskProvider implements Closeable {
     /**
      * Acquires a content provider for a given task provider. The content provider will
      * be released when the TaskProvider is closed.
+     * @param resolver will be used to acquire the content provider client
+     * @param name task provider to acquire content provider for
+     * @return content provider for the given task provider (may be {@code null})
      */
     @SuppressWarnings("Recycle")
     public static TaskProvider acquire(ContentResolver resolver, TaskProvider.ProviderName name) {
@@ -69,7 +70,7 @@ public class TaskProvider implements Closeable {
         try {
             client = resolver.acquireContentProviderClient(name.authority);
         } catch(SecurityException e) {
-            Log.e(TAG, "Not allowed to access task provider: ", e);
+            Constants.log.log(Level.WARNING, "Not allowed to access task provider: ", e);
         }
 
         return client != null ? new TaskProvider(name, client) : null;

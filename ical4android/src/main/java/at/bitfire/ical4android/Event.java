@@ -12,25 +12,21 @@
 
 package at.bitfire.ical4android;
 
-import android.util.Log;
-
 import net.fortuna.ical4j.data.CalendarOutputter;
 import net.fortuna.ical4j.data.ParserException;
 import net.fortuna.ical4j.model.Calendar;
 import net.fortuna.ical4j.model.Component;
 import net.fortuna.ical4j.model.ComponentList;
-import net.fortuna.ical4j.model.Date;
-import net.fortuna.ical4j.model.DateTime;
 import net.fortuna.ical4j.model.Property;
 import net.fortuna.ical4j.model.PropertyList;
 import net.fortuna.ical4j.model.TimeZone;
-import net.fortuna.ical4j.model.ValidationException;
 import net.fortuna.ical4j.model.component.VAlarm;
 import net.fortuna.ical4j.model.component.VEvent;
 import net.fortuna.ical4j.model.property.Attendee;
 import net.fortuna.ical4j.model.property.Clazz;
 import net.fortuna.ical4j.model.property.Description;
 import net.fortuna.ical4j.model.property.DtEnd;
+import net.fortuna.ical4j.model.property.DtStamp;
 import net.fortuna.ical4j.model.property.DtStart;
 import net.fortuna.ical4j.model.property.Duration;
 import net.fortuna.ical4j.model.property.ExDate;
@@ -38,6 +34,7 @@ import net.fortuna.ical4j.model.property.ExRule;
 import net.fortuna.ical4j.model.property.LastModified;
 import net.fortuna.ical4j.model.property.Location;
 import net.fortuna.ical4j.model.property.Organizer;
+import net.fortuna.ical4j.model.property.ProdId;
 import net.fortuna.ical4j.model.property.RDate;
 import net.fortuna.ical4j.model.property.RRule;
 import net.fortuna.ical4j.model.property.RecurrenceId;
@@ -47,13 +44,14 @@ import net.fortuna.ical4j.model.property.Summary;
 import net.fortuna.ical4j.model.property.Transp;
 import net.fortuna.ical4j.model.property.Uid;
 import net.fortuna.ical4j.model.property.Version;
+import net.fortuna.ical4j.validate.ValidationException;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.nio.charset.Charset;
-import java.util.Collection;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -61,19 +59,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.logging.Level;
 
 import lombok.Cleanup;
-import lombok.Getter;
 import lombok.NonNull;
+import lombok.ToString;
 
+@ToString(of={"uid","dtStart","summary"})
 public class Event extends iCalendar {
-    private static final String TAG = "davdroid.Event";
-
     public static final String CALENDAR_NAME = "X-WR-CALNAME";
 
     // uid and sequence are inherited from iCalendar
     public RecurrenceId recurrenceId;
-    public long lastModified;
 
     public String summary, location, description;
 
@@ -83,10 +80,10 @@ public class Event extends iCalendar {
     public Duration duration;
     public RRule rRule;
     public ExRule exRule;
-    @Getter private List<RDate> rDates = new LinkedList<>();
-    @Getter private List<ExDate> exDates = new LinkedList<>();
+    public final List<RDate> rDates = new LinkedList<>();
+    public final List<ExDate> exDates = new LinkedList<>();
 
-    @Getter private List<Event> exceptions = new LinkedList<>();
+    public final List<Event> exceptions = new LinkedList<>();
 
     public Boolean forPublic;
     public Status status;
@@ -94,9 +91,23 @@ public class Event extends iCalendar {
     public boolean opaque;
 
     public Organizer organizer;
-    @Getter private List<Attendee> attendees = new LinkedList<>();
+    public final List<Attendee> attendees = new LinkedList<>();
 
-    @Getter private List<VAlarm> alarms = new LinkedList<>();
+    public final List<VAlarm> alarms = new LinkedList<>();
+
+    // unknown properties
+    protected static final String[] knownPropertyNames = {
+            Uid.UID, Sequence.SEQUENCE,
+            RecurrenceId.RECURRENCE_ID,
+            Summary.SUMMARY, Location.LOCATION, Description.DESCRIPTION,
+            DtStart.DTSTART, DtEnd.DTEND,
+            Duration.DURATION, RRule.RRULE, ExRule.EXRULE, RDate.RDATE, ExDate.EXDATE,
+            Clazz.CLASS,
+            Status.STATUS, Transp.TRANSP,
+            Organizer.ORGANIZER, Attendee.ATTENDEE,
+            DtStamp.DTSTAMP, LastModified.LAST_MODIFIED     // ignore current DTSTAMP and LAST-MODIFIED
+    };
+    public final List<Property> unknownProperties = new LinkedList<>();
 
 
     /**
@@ -110,6 +121,7 @@ public class Event extends iCalendar {
      */
     @SuppressWarnings("unchecked")
     public static Event[] fromStream(@NonNull InputStream stream, Charset charset, Map<String, String> properties) throws IOException, InvalidCalendarException {
+        Constants.log.fine("Parsing iCalendar stream");
         final Calendar ical;
         try {
             if (charset != null) {
@@ -133,17 +145,55 @@ public class Event extends iCalendar {
         for (VEvent vEvent : vEvents)
             if (vEvent.getUid() == null) {
                 Uid uid = new Uid(UUID.randomUUID().toString());
-                Log.w(TAG, "Found VEVENT without UID, using a random one: " + uid.getValue());
+                Constants.log.warning("Found VEVENT without UID, using a random one: " + uid.getValue());
                 vEvent.getProperties().add(uid);
             }
 
-        List<Event> events = new LinkedList<>();
-        for (VEvent masterEvent : (Iterable<VEvent>) findMasterEvents(vEvents)) {
-            Event event = fromVEvent(masterEvent);
-            for (VEvent exception : (Iterable<VEvent>) findExceptions(event.uid, vEvents))
-                event.exceptions.add(fromVEvent(exception));
+        Constants.log.fine("Assigning exceptions to master events");
+        Map<String,VEvent> masterEvents = new HashMap<>(vEvents.size());
+        Map<String,Map<String,VEvent>> exceptions = new HashMap<>();
+
+        for (VEvent vEvent : vEvents) {
+            final String uid = vEvent.getUid().getValue();
+            int sequence = vEvent.getSequence() == null ? 0 : vEvent.getSequence().getSequenceNo();
+
+            if (vEvent.getRecurrenceId() == null) {
+                // master event (no RECURRENCE-ID)
+                VEvent event = masterEvents.get(uid);
+                // If there are multiple entries, compare SEQUENCE and use the one with higher SEQUENCE.
+                // If the SEQUENCE is identical, use latest version.
+                if (event == null || (event.getSequence() != null && sequence >= event.getSequence().getSequenceNo()))
+                    masterEvents.put(uid, vEvent);
+
+            } else {
+                // exception (RECURRENCE-ID)
+                Map<String,VEvent> ex = exceptions.get(uid);
+                // first index level: UID
+                if (ex == null) {
+                    ex = new HashMap<>();
+                    exceptions.put(uid, ex);
+                }
+                // second index level: RECURRENCE-ID
+                String recurrenceID = vEvent.getRecurrenceId().getValue();
+                VEvent event = ex.get(recurrenceID);
+                if (event == null || (event.getSequence() != null && sequence >= event.getSequence().getSequenceNo()))
+                    ex.put(recurrenceID, vEvent);
+            }
+        }
+
+        List<Event> events = new ArrayList<>(masterEvents.size());
+        for (Map.Entry<String, VEvent> masterEvent : masterEvents.entrySet()) {
+            String uid = masterEvent.getKey();
+            Event event = fromVEvent(masterEvent.getValue());
+
+            Map<String,VEvent> eventExceptions = exceptions.get(uid);
+            if (eventExceptions != null)
+                for (VEvent ex : eventExceptions.values())
+                    event.exceptions.add(fromVEvent(ex));
+
             events.add(event);
         }
+
         return events.toArray(new Event[events.size()]);
     }
 
@@ -155,124 +205,86 @@ public class Event extends iCalendar {
     }
 
 
-    /**
-     * Finds events without RECURRENCE-ID ("master events").
-     * If there are multiple versions, use the one with highest SEQUENCE.
-     * @param vEvents  list of VEvents to scan; every VEvent must have an UID
-     */
-    static Collection<VEvent> findMasterEvents(List<VEvent> vEvents) {
-        Map<String, VEvent> vEventMap = new HashMap<>(vEvents.size());
-        for (VEvent vEvent : (Iterable<VEvent>) vEvents) {
-            String uid = vEvent.getUid().getValue();
-
-            if (vEvent.getRecurrenceId() != null)
-                // VEVENT has a RECURRENCE-ID, so it's an exception
-                continue;
-
-            if (vEventMap.containsKey(uid)) {
-                // UID already known, compare SEQUENCE and use the one with higher SEQUENCE.
-                // If the SEQUENCE is identical, use latest version.
-                int seq = 0;
-                if (vEvent.getSequence() != null)
-                    seq = vEvent.getSequence().getSequenceNo();
-
-                int otherSeq = 0;
-                VEvent otherVEvent = vEventMap.get(uid);
-                if (otherVEvent.getSequence() != null)
-                    otherSeq = otherVEvent.getSequence().getSequenceNo();
-
-                if (seq >= otherSeq)
-                    vEventMap.put(uid, vEvent);
-            } else
-                vEventMap.put(uid, vEvent);
-        }
-        return vEventMap.values();
-    }
-
-    static Collection<VEvent> findExceptions(String uid, List<VEvent> vEvents) {
-        Map<String, VEvent> exceptionMap = new HashMap<>();     // map of <recurring-id, exception> for given uid
-        for (VEvent vEvent : vEvents) {
-            if (!uid.equals(vEvent.getUid().getValue()) || vEvent.getRecurrenceId() == null)
-                // ignore VEvents without or with wrong UID or without RECURRENCE-ID
-                continue;
-
-            String recurrenceID = vEvent.getRecurrenceId().getValue();
-            if (exceptionMap.containsKey(recurrenceID)) {
-                // UID already known, compare SEQUENCE and use the one with higher SEQUENCE.
-                // If the SEQUENCE is identical, use latest version.
-                int seq = 0;
-                if (vEvent.getSequence() != null)
-                    seq = vEvent.getSequence().getSequenceNo();
-
-                int otherSeq = 0;
-                VEvent otherVEvent = exceptionMap.get(recurrenceID);
-                if (otherVEvent.getSequence() != null)
-                    otherSeq = otherVEvent.getSequence().getSequenceNo();
-
-                if (seq >= otherSeq)
-                    exceptionMap.put(recurrenceID, vEvent);
-            } else
-                exceptionMap.put(recurrenceID, vEvent);
-        }
-        return exceptionMap.values();
-    }
-
-
     protected static Event fromVEvent(VEvent event) throws InvalidCalendarException {
         final Event e = new Event();
 
-        if (event.getUid() != null)
-            e.uid = event.getUid().getValue();
-        e.recurrenceId = event.getRecurrenceId();
+        // default values
+        e.sequence = 0;
+        e.opaque = true;
+        e.forPublic = true;
 
-        // sequence must only be null for locally created, not-yet-synchronized events
-        e.sequence = (event.getSequence() != null) ? event.getSequence().getSequenceNo() : 0;
+        // process properties
+        for (Property prop : event.getProperties()) {
+            if (prop instanceof Uid)
+                e.uid = prop.getValue();
 
-        if (event.getLastModified() != null)
-            e.lastModified = event.getLastModified().getDateTime().getTime();
+            else if (prop instanceof RecurrenceId)
+                e.recurrenceId = (RecurrenceId)prop;
 
-        if ((e.dtStart = event.getStartDate()) == null || (e.dtEnd = event.getEndDate()) == null)
-            throw new InvalidCalendarException("Invalid start time/end time/duration");
+            else if (prop instanceof Sequence)
+                e.sequence = ((Sequence)prop).getSequenceNo();
+
+            else if (prop instanceof DtStart)
+                e.dtStart = (DtStart)prop;
+            else if (prop instanceof DtEnd)
+                e.dtEnd = (DtEnd)prop;
+            else if (prop instanceof Duration)
+                e.duration = (Duration)prop;
+
+            else if (prop instanceof RRule)
+                e.rRule = (RRule)prop;
+            else if (prop instanceof RDate)
+                e.rDates.add((RDate)prop);
+            else if (prop instanceof ExRule)
+                e.exRule = (ExRule)prop;
+            else if (prop instanceof ExDate)
+                e.exDates.add((ExDate)prop);
+
+            else if (prop instanceof Summary)
+                e.summary = prop.getValue();
+            else if (prop instanceof Location)
+                e.location = prop.getValue();
+            else if (prop instanceof Description)
+                e.description = prop.getValue();
+
+            else if (prop instanceof Status)
+                e.status = (Status)prop;
+            else if (prop instanceof Transp)
+                e.opaque = prop == Transp.OPAQUE;
+
+            else if (prop instanceof Clazz)
+                e.forPublic = prop == Clazz.PUBLIC;
+
+            else if (prop instanceof Organizer)
+                e.organizer = (Organizer)prop;
+            else if (prop instanceof Attendee)
+                e.attendees.add((Attendee)prop);
+
+            else if (prop instanceof ProdId || prop instanceof DtStamp || prop instanceof LastModified)
+                /* ignore */;
+
+            else    // retain unknown properties
+                e.unknownProperties.add(prop);
+        }
+
+        // calculate DtEnd from Duration
+        if (e.dtEnd == null && e.duration != null)
+            e.dtEnd = event.getEndDate(true);
+
+        e.alarms.addAll(event.getAlarms());
+
+        // validation
+        if (e.dtStart == null)
+            throw new InvalidCalendarException("Event without start time");
 
         validateTimeZone(e.dtStart);
         validateTimeZone(e.dtEnd);
-
-        e.rRule = (RRule) event.getProperty(Property.RRULE);
-        for (RDate rdate : (List<RDate>) (List<?>) event.getProperties(Property.RDATE))
-            e.rDates.add(rdate);
-        e.exRule = (ExRule) event.getProperty(Property.EXRULE);
-        for (ExDate exdate : (List<ExDate>) (List<?>) event.getProperties(Property.EXDATE))
-            e.exDates.add(exdate);
-
-        if (event.getSummary() != null)
-            e.summary = event.getSummary().getValue();
-        if (event.getLocation() != null)
-            e.location = event.getLocation().getValue();
-        if (event.getDescription() != null)
-            e.description = event.getDescription().getValue();
-
-        e.status = event.getStatus();
-        e.opaque = event.getTransparency() != Transp.TRANSPARENT;
-
-        e.organizer = event.getOrganizer();
-        for (Attendee attendee : (List<Attendee>) (List<?>) event.getProperties(Property.ATTENDEE))
-            e.attendees.add(attendee);
-
-        Clazz classification = event.getClassification();
-        if (classification != null) {
-            if (classification == Clazz.PUBLIC)
-                e.forPublic = true;
-            else if (classification == Clazz.CONFIDENTIAL || classification == Clazz.PRIVATE)
-                e.forPublic = false;
-        }
-
-        e.alarms = event.getAlarms();
 
         return e;
     }
 
     @SuppressWarnings("unchecked")
-    public ByteArrayOutputStream toStream() throws IOException {
+    public void write(OutputStream os) throws IOException {
         net.fortuna.ical4j.model.Calendar ical = new net.fortuna.ical4j.model.Calendar();
         ical.getProperties().add(Version.VERSION_2_0);
         ical.getProperties().add(prodId);
@@ -308,13 +320,11 @@ public class Event extends iCalendar {
             ical.getComponents().add(timeZone.getVTimeZone());
 
         CalendarOutputter output = new CalendarOutputter(false);
-        ByteArrayOutputStream os = new ByteArrayOutputStream();
         try {
             output.output(ical, os);
         } catch (ValidationException e) {
-            Log.e(TAG, "Couldn't generate valid VEVENT", e);
+            Constants.log.log(Level.SEVERE, "Couldn't generate valid VEVENT", e);
         }
-        return os;
     }
 
     protected VEvent toVEvent(Uid uid) {
@@ -325,8 +335,6 @@ public class Event extends iCalendar {
             props.add(uid);
         if (recurrenceId != null)
             props.add(recurrenceId);
-        if (lastModified != 0)
-            props.add(new LastModified(new DateTime(lastModified)));
         if (sequence != null && sequence != 0)
             props.add(new Sequence(sequence));
 
@@ -364,6 +372,8 @@ public class Event extends iCalendar {
         if (forPublic != null)
             event.getProperties().add(forPublic ? Clazz.PUBLIC : Clazz.PRIVATE);
 
+        props.addAll(unknownProperties);
+
         event.getAlarms().addAll(alarms);
         return event;
     }
@@ -375,41 +385,11 @@ public class Event extends iCalendar {
         return !isDateTime(dtStart);
     }
 
-    public long getDtStartInMillis() {
-        return dtStart.getDate().getTime();
-    }
-
     public String getDtStartTzID() {
         return getTzId(dtStart);
     }
-
-    public void setDtStart(long tsStart, String tzID) {
-        if (tzID == null) {    // all-day
-            dtStart = new DtStart(new Date(tsStart));
-        } else {
-            DateTime start = new DateTime(tsStart);
-            start.setTimeZone(DateUtils.tzRegistry.getTimeZone(tzID));
-            dtStart = new DtStart(start);
-        }
-    }
-
-
-    public long getDtEndInMillis() {
-        return dtEnd.getDate().getTime();
-    }
-
     public String getDtEndTzID() {
         return getTzId(dtEnd);
-    }
-
-    public void setDtEnd(long tsEnd, String tzID) {
-        if (tzID == null) {    // all-day
-            dtEnd = new DtEnd(new Date(tsEnd));
-        } else {
-            DateTime end = new DateTime(tsEnd);
-            end.setTimeZone(DateUtils.tzRegistry.getTimeZone(tzID));
-            dtEnd = new DtEnd(end);
-        }
     }
 
 }

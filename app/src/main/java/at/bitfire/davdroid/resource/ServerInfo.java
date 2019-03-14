@@ -19,8 +19,15 @@ public class ServerInfo implements Serializable {
 	final private URI baseURI;
 	final private String userName, password;
 	final boolean authPreemptive;
-	
+
+	private String cardHomeSet, calHomeSet;
+
 	private String logs;
+	// log last exception
+	private Exception exception;
+
+	private boolean isDefaultAccount;
+
 	
 	private ResourceInfo
 		addressBooks[] = new ResourceInfo[0],

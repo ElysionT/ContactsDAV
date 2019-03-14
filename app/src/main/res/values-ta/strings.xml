@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ Copyright (c) 2013 – 2015 Ricki Hirner (bitfire web engineering).
+  ~ Copyright (c) 2015 – 2016 ZUK.
+  ~ All rights reserved. This program and the accompanying materials
+  ~ are made available under the terms of the GNU Public License v3.0
+  ~ which accompanies this distribution, and is available at
+  ~ http://www.gnu.org/licenses/gpl.html
+  -->
+
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- common strings -->
+    <string name="help">உதவி</string>
+    <string name="next">அடுத்து</string>
+    <string name="please_wait">காத்திருக்கவும்</string>
+    <string name="send">அனுப்பு</string>
+    <string name="skip">தவிர்</string>
+
+    <!-- AddAccountActivity -->
+    <string name="login_user_name">பயனர் பெயர்</string>
+    <string name="login_password">கடவுச்சொல்</string>
+
+    <string name="login_server_name_hint">சர்வர் my.webhost.com</string>
+    <string name="login_account_description_hint">விளக்கவுரை</string>
+    <string name="login_label">உள்நுழை</string>
+    <!-- Settings activity -->
+    <string name="settings_title">அமைப்புகள்</string>
+    <string name="settings_authentication">அங்கீகாரம்</string>
+    <string name="settings_username">பயனர் பெயர்</string>
+    <string name="settings_enter_username">பயனர் பெயரை உள்ளிடவும்:</string>
+    <string name="settings_password">கடவுச்சொல்</string>
+    <string name="settings_password_summary">உங்கள் சர்வருக்கு உகந்த கடவுச்செல்லை புதுப்பியுங்கள்.</string>
+    <string name="settings_enter_password">உங்கள் கடவுச்சொல்லை உள்ளிடுங்கள்:</string>
+    <string name="settings_sync">ஒத்திசைவு</string>
+    <string name="settings_sync_interval_contacts">தொடர்புகள் ஒத்திசைவு இடைவேளை</string>
+    <string name="settings_sync_summary_manually">கைமுறையாக மட்டும்</string>
+    <string name="settings_sync_summary_periodically" tools:ignore="PluralsCandidate">%d நிமிடங்களுக்கு ஒருமுறை + உள் மாற்றங்களுக்குப் பிறகு உடனடியாக</string>
+    <string name="settings_sync_summary_not_available">கிடைக்கவில்லை</string>
+    <string-array name="settings_sync_interval_seconds">
+        <item>-1</item>
+        <item>3600</item>
+        <item>7200</item>
+        <item>14400</item>
+        <item>86400</item>
+    </string-array>
+    <string-array name="settings_sync_interval_names">
+        <item>கைமுறையாக மட்டும்</item>
+        <item>15 நிமிடங்களுக்கு ஒருமுறை</item>
+        <item>ஒரு மணி நேரத்துக்கு ஒருமுறை</item>
+        <item>2 மணிநேரங்களுக்கு ஒருமுறை</item>
+        <item>4 மணிநேரங்களுக்கு ஒருமுறை</item>
+        <item>ஒரு நாளுக்கு ஒருமுறை</item>
+    </string-array>
+    <string name="settings_debug">வழுநீக்கம்</string>
+    <string name="settings_security_warning">பாதுகாப்புக்கு அச்சுறத்தல் ஏற்படுத்தக்கூடிய அபாயம்!</string>
+    <string name="settings_log_to_external_file">வெளிப்புறக் கோப்பில் பதியவும்</string>
+    <string name="settings_log_to_external_file_confirmation">வெளிப்புற பதிவுக் கோப்புகள் தனிப்பட்ட தரவுகளைக் கொண்டிருக்கும் மேலும் பிற செயலிகளால் அணுகக்கூடியதாக இருக்கும். வெளிப்புற பதிவாக்கத்தை அணைத்து வைத்து, பதிவுக் கோப்புகளைப் பயன்படுத்திய பிறகு நீக்கிவிடுங்கள்.</string>
+    <string name="settings_log_to_external_file_on">%s இல் பதிவுகள் எழுதப்படுகின்றன (சாத்தியமென்றால்)</string>
+    <string name="settings_log_to_external_file_no_external_storage">வெளிப்புற சேமிப்பகம் கிடைக்கவில்லை</string>
+    <string name="settings_log_to_external_file_off">பதிவுகள் ADB இல் எழுதப்படுகின்றன</string>
+    <string name="settings_log_verbose">வெர்போஸ் பதிவாக்கம்</string>
+    <string name="settings_log_verbose_on">பதிவு ஒத்திசைவுத் தகவல் மற்றும் நெட்வொர்க் ட்ராஃபிக்</string>
+    <string name="settings_log_verbose_off">ஒத்திசைவுத் தகவலை மட்டும் பதிவு செய்</string>
+
+    <string name="setup_login_failed">உள்நுழைதல் தவறியது</string>
+    <string name="setup_login_network_error">உங்கள் நெட்வொர்க் இணைப்பை சரிபார்க்கவும்!</string>
+    <string name="setup_login_icloud_info_error">உங்கள் ஆப்பிள் ID மற்றும் கடவுச்சொல்லை சரிபார்க்கவும்!</string>
+    <string name="setup_login_icloud_info_error_for_two_step">உங்கள் ஆப்பிள் ID மற்றும் கடவுச்சொல்லை சரிபார்க்கவும்!\n\nஇரு நிலை சரிபார்ப்பை செயல்படுத்தி இருந்தால், நீங்கள் செயலிக்கென்று தனிப்பட்ட <a href="https://support.apple.com/en-us/HT204397">கடவுச்சொற்களை உருவாக்கி உள்ளிடுவதை உறுதிசெய்யுங்கள்</a>. செயலிக்கென்று தனிப்பட்ட <a href="https://appleid.apple.com">கடவுச்சொற்களை உருவாக்குவதற்கு ஆப்பிள் ID </a> கணக்குப் பக்கத்தை திறக்கவும்.</string>
+    <string name="setup_dialog_retry">மறுமுயற்சி செய்</string>
+    <string name="setup_add_account">கணக்கைச் சேர்</string>
+    <string name="setup_querying_server_icloud">iCloud ஏற்றுகிறது. காத்திருக்கவும்...</string>
+    <string name="setup_querying_server_carddav">CardDAV ஏற்றுகிறது. காத்திருக்கவும்...</string>
+
+    <!-- sync errors and DebugInfoActivity -->
+    <string name="debug_info_title">வழுநீக்கத் தகவல்</string>
+    <string name="sync_error_calendar">நாட்காட்டி ஒத்திசைவு தவறியது (%s)</string>
+    <string name="sync_error_contacts">முகவரிப் புத்தக ஒத்திசைவு தவறியது (%s)</string>
+    <string name="sync_error">%s செய்யும்போது பிழை</string>
+    <string name="sync_error_http_dav">%s செய்யும்போது சர்வர் பிழை</string>
+    <string name="sync_error_local_storage">%s செய்யும்போது தரவுத்தளப் பிழை</string>
+    <string-array name="sync_error_phases">
+        <item>ஒத்திசைவு செய்வதற்கு தயாராகிறது</item>
+        <item>திறன்களை கோருகிறது</item>
+        <item>உள்ளுக்குள் நீக்கப்பட்ட உள்ளீடுகளை செயல்முறைப்படுத்துகிறது</item>
+        <item>உருவாக்கப்பட்ட/திருத்தி அமைக்கப்பட்ட உள்ளீடுகளை தயார் செய்கிறது</item>
+        <item>உருவாக்கப்பட்ட/திருத்தி அமைக்கப்பட்ட உள்ளீடுகளை பதிவேற்றுகிறது</item>
+        <item>ஒத்திசைவு நிலையை சரிபார்க்கிறது</item>
+        <item>லோக்கல் உள்ளீடுகளை பட்டியலிடுகிறது</item>
+        <item>ரிமோட் உள்ளீடுகளை பட்டியலிடுகிறது</item>
+        <item>லோக்கல்/ரிமோட் உள்ளீடுகளை ஒப்பிடுகிறது</item>
+        <item>ரிமோட் உள்ளீடுகளை பதிவிறக்குகிறது</item>
+        <item>ஒத்திசைவு நிலையை சேமிக்கிறது</item>
+    </string-array>
+    <string name="sync_error_unauthorized">பயனர் பெயர்/கடவுச்சொல் தவறு</string>
+
+    <string name="login_account_not_created">கணக்கு இல்லை நீங்கள் ஒரே பெயரில் இரண்டு கணக்குகள் இல்லை முடியும், உருவாக்கப்பட்ட முடியும்.</string>
+
+</resources>

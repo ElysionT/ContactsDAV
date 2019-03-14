@@ -11,7 +11,9 @@ package at.bitfire.davdroid.ui.settings;
 import android.accounts.Account;
 import android.app.AlertDialog;
 import android.app.DialogFragment;
+import android.content.ContentResolver;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.os.Bundle;
 import android.preference.EditTextPreference;
 import android.preference.ListPreference;
@@ -22,14 +24,29 @@ import android.provider.CalendarContract;
 import android.provider.ContactsContract;
 
 import java.io.File;
+import java.util.logging.Level;
 
-import at.bitfire.davdroid.R;
+import com.zui.davdroid.R;
+import com.zui.davdroid.RefreshCollections;
+import com.zui.davdroid.common.LoggingReader;
+
+import at.bitfire.davdroid.App;
+import at.bitfire.davdroid.Constants;
+import at.bitfire.davdroid.InvalidAccountException;
 import at.bitfire.davdroid.log.ExternalFileLogger;
-import at.bitfire.davdroid.syncadapter.AccountSettings;
+import at.bitfire.davdroid.AccountSettings;
 import at.bitfire.ical4android.TaskProvider;
 
 public class AccountFragment extends PreferenceFragment {
-	final static String ARG_ACCOUNT = "account";
+    private static final String KEY_USERNAME = "username";
+	private static final String KEY_PASSWORD = "password";
+	private static final String KEY_SYNC_INTERVAL_CONTACTS ="sync_interval_contacts";
+	private static final String KEY_DEBUGGING = "debugging";
+	private static final String KEY_LOG_EXTERNAL_FILE = "log_external_file";
+	private static final String KEY_LOG_VERBOSE = "log_verbose";
+	private static final String KEY_FUNCTION_TEST = "function_test";
+	private static final String KEY_FUNCTION_SYNC_TEST = "function_sync_test";
+	private static final String KEY_SUB_SETTINGS_TEST = "sub_settings_test";
 
 	Account account;
 
@@ -38,16 +55,23 @@ public class AccountFragment extends PreferenceFragment {
 		super.onCreate(savedInstanceState);
 
 		addPreferencesFromResource(R.xml.settings_account_prefs);
-
-		account = getArguments().getParcelable(ARG_ACCOUNT);
+		account = getActivity().getIntent().getParcelableExtra(Constants.EXTRA_KEY_ACCOUNT);
 		refresh();
 	}
 
 	public void refresh() {
-		final AccountSettings settings = new AccountSettings(getActivity(), account);
+		final AccountSettings settings;
+
+		try {
+			settings = new AccountSettings(getActivity(), account);
+		} catch(InvalidAccountException e) {
+			App.log.log(Level.INFO, "Account is invalid or doesn't exist (anymore)", e);
+			getActivity().finish();
+			return;
+		}
 
 		// category: authentication
-		final EditTextPreference prefUserName = (EditTextPreference)findPreference("username");
+		final EditTextPreference prefUserName = (EditTextPreference)findPreference(KEY_USERNAME);
 		prefUserName.setSummary(settings.username());
 		prefUserName.setText(settings.username());
 		prefUserName.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
@@ -58,7 +82,7 @@ public class AccountFragment extends PreferenceFragment {
 			}
 		});
 
-		final EditTextPreference prefPassword = (EditTextPreference)findPreference("password");
+		final EditTextPreference prefPassword = (EditTextPreference)findPreference(KEY_PASSWORD);
 		prefPassword.setText(settings.password());
 		prefPassword.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
 			@Override
@@ -68,18 +92,8 @@ public class AccountFragment extends PreferenceFragment {
 			}
 		});
 
-		final SwitchPreference prefPreemptive = (SwitchPreference)findPreference("preemptive");
-		prefPreemptive.setChecked(settings.preemptiveAuth());
-		prefPreemptive.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
-			@Override
-			public boolean onPreferenceChange(Preference preference, Object newValue) {
-				settings.preemptiveAuth((Boolean) newValue);
-                refresh(); return false;
-			}
-		});
-
 		// category: synchronization
-		final ListPreference prefSyncContacts = (ListPreference)findPreference("sync_interval_contacts");
+		final ListPreference prefSyncContacts = (ListPreference)findPreference(KEY_SYNC_INTERVAL_CONTACTS);
 		final Long syncIntervalContacts = settings.getSyncInterval(ContactsContract.AUTHORITY);
 		if (syncIntervalContacts != null) {
 			prefSyncContacts.setValue(syncIntervalContacts.toString());
@@ -99,92 +113,108 @@ public class AccountFragment extends PreferenceFragment {
 			prefSyncContacts.setSummary(R.string.settings_sync_summary_not_available);
 		}
 
-		final ListPreference prefSyncCalendars = (ListPreference)findPreference("sync_interval_calendars");
-		final Long syncIntervalCalendars = settings.getSyncInterval(CalendarContract.AUTHORITY);
-		if (syncIntervalCalendars != null) {
-			prefSyncCalendars.setValue(syncIntervalCalendars.toString());
-			if (syncIntervalCalendars == AccountSettings.SYNC_INTERVAL_MANUALLY)
-				prefSyncCalendars.setSummary(R.string.settings_sync_summary_manually);
-			else
-				prefSyncCalendars.setSummary(getString(R.string.settings_sync_summary_periodically, syncIntervalCalendars / 60));
-			prefSyncCalendars.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
+		if (LoggingReader.DEBUGGING) {
+			// category: debug info
+			final SwitchPreference prefLogExternalFile = (SwitchPreference) findPreference
+					(KEY_LOG_EXTERNAL_FILE);
+
+			prefLogExternalFile.setChecked(settings.logToExternalFile());
+			File logDirectory = ExternalFileLogger.getDirectory(getActivity());
+			prefLogExternalFile.setSummaryOn(logDirectory != null ?
+							getString(R.string.settings_log_to_external_file_on, logDirectory
+									.getPath()) :
+							getString(R.string.settings_log_to_external_file_no_external_storage)
+			);
+			prefLogExternalFile.setOnPreferenceChangeListener(new Preference
+					.OnPreferenceChangeListener() {
 				@Override
 				public boolean onPreferenceChange(Preference preference, Object newValue) {
-					settings.setSyncInterval(CalendarContract.AUTHORITY, Long.parseLong((String) newValue));
-                    refresh(); return false;
+					Boolean external = (Boolean) newValue;
+					if (external) {
+						getFragmentManager().beginTransaction()
+								.add(LogExternalFileDialogFragment.newInstance(account), null)
+								.commit();
+						return false;
+					} else {
+						settings.logToExternalFile(false);
+						refresh();
+						return false;
+					}
+				}
+			});
+
+			final SwitchPreference prefLogVerbose = (SwitchPreference) findPreference
+					(KEY_LOG_VERBOSE);
+			prefLogVerbose.setChecked(settings.logVerbose());
+			prefLogVerbose.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener
+					() {
+				@Override
+				public boolean onPreferenceChange(Preference preference, Object newValue) {
+					settings.logVerbose((Boolean) newValue);
+					refresh();
+					return false;
 				}
 			});
 		} else {
-			prefSyncCalendars.setEnabled(false);
-			prefSyncCalendars.setSummary(R.string.settings_sync_summary_not_available);
+			final Preference preference = findPreference(KEY_DEBUGGING);
+			if (null != preference) {
+				getPreferenceScreen().removePreference(preference);
+			}
 		}
 
-		final ListPreference prefSyncTasks = (ListPreference)findPreference("sync_interval_tasks");
-		final Long syncIntervalTasks = settings.getSyncInterval(TaskProvider.ProviderName.OpenTasks.authority);
-		if (syncIntervalTasks != null) {
-			prefSyncTasks.setValue(syncIntervalTasks.toString());
-			if (syncIntervalTasks == AccountSettings.SYNC_INTERVAL_MANUALLY)
-				prefSyncTasks.setSummary(R.string.settings_sync_summary_manually);
-			else
-				prefSyncTasks.setSummary(getString(R.string.settings_sync_summary_periodically, syncIntervalTasks / 60));
-			prefSyncTasks.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
+		if (App.FUNCTION_TEST) {
+			Preference preference = findPreference(KEY_FUNCTION_SYNC_TEST);
+			preference.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
 				@Override
-				public boolean onPreferenceChange(Preference preference, Object newValue) {
-					settings.setSyncInterval(TaskProvider.ProviderName.OpenTasks.authority, Long.parseLong((String) newValue));
-                    refresh(); return false;
+				public boolean onPreferenceClick(Preference preference) {
+					String authorities[] = {
+							ContactsContract.AUTHORITY,
+							CalendarContract.AUTHORITY,
+							TaskProvider.ProviderName.OpenTasks.authority
+					};
+
+					for (String authority : authorities) {
+						Bundle extras = new Bundle();
+						extras.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);        // manual sync
+						extras.putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true);     // run immediately (don't queue)
+						extras.putBoolean(RefreshCollections.KEY_SYNC_COLLECTION, false);
+						ContentResolver.requestSync(account, authority, extras);
+					}
+					return true;
+				}
+			});
+			preference = findPreference(KEY_SUB_SETTINGS_TEST);
+			preference.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
+				@Override
+				public boolean onPreferenceClick(Preference preference) {
+					final Intent intent = new Intent(Constants.ACTION_SYNC_SETTINGS);
+					intent.putExtra(Constants.EXTRA_SHOW_FRAGMENT,
+							Constants.CLASS_ACCOUNT_SYNC_SETTINGS);
+					intent.putExtra(Constants.EXTRA_SHOW_FRAGMENT_AS_SUBSETTING, true);
+					final Bundle args = new Bundle();
+					args.putParcelable(Constants.EXTRA_KEY_ACCOUNT, account);
+					intent.putExtra(Constants.EXTRA_SHOW_FRAGMENT_ARGUMENTS, args);
+					startActivity(intent);
+					return true;
 				}
 			});
 		} else {
-			prefSyncTasks.setEnabled(false);
-			prefSyncTasks.setSummary(R.string.settings_sync_summary_not_available);
+			Preference preference = findPreference(KEY_FUNCTION_TEST);
+			if (null != preference) {
+				getPreferenceScreen().removePreference(preference);
+			}
+			preference = findPreference(KEY_SUB_SETTINGS_TEST);
+			if (null != preference) {
+				getPreferenceScreen().removePreference(preference);
+			}
 		}
-
-        // category: debug info
-
-        final SwitchPreference prefLogExternalFile = (SwitchPreference)findPreference("log_external_file");
-        prefLogExternalFile.setChecked(settings.logToExternalFile());
-        File logDirectory = ExternalFileLogger.getDirectory(getActivity());
-        prefLogExternalFile.setSummaryOn(logDirectory != null ?
-                getString(R.string.settings_log_to_external_file_on, logDirectory.getPath()) :
-                getString(R.string.settings_log_to_external_file_no_external_storage)
-        );
-        prefLogExternalFile.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
-            @Override
-            public boolean onPreferenceChange(Preference preference, Object newValue) {
-                Boolean external = (Boolean) newValue;
-                if (external) {
-                    getFragmentManager().beginTransaction()
-                            .add(LogExternalFileDialogFragment.newInstance(account), null)
-                            .commit();
-                    return false;
-                } else {
-                    settings.logToExternalFile(false);
-                    refresh();
-                    return false;
-                }
-            }
-        });
-
-        final SwitchPreference prefLogVerbose = (SwitchPreference)findPreference("log_verbose");
-        prefLogVerbose.setChecked(settings.logVerbose());
-        prefLogVerbose.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
-            @Override
-            public boolean onPreferenceChange(Preference preference, Object newValue) {
-                settings.logVerbose((Boolean) newValue);
-                refresh(); return false;
-            }
-        });
-
 	}
 
-
-    public static class LogExternalFileDialogFragment extends DialogFragment {
-        private static final String
-                KEY_ACCOUNT = "account";
+	public static class LogExternalFileDialogFragment extends DialogFragment {
 
         public static LogExternalFileDialogFragment newInstance(Account account) {
             Bundle args = new Bundle();
-            args.putParcelable(KEY_ACCOUNT, account);
+            args.putParcelable(Constants.EXTRA_KEY_ACCOUNT, account);
             LogExternalFileDialogFragment fragment = new LogExternalFileDialogFragment();
             fragment.setArguments(args);
             return fragment;
@@ -192,7 +222,16 @@ public class AccountFragment extends PreferenceFragment {
 
         @Override
         public AlertDialog onCreateDialog(Bundle savedInstanceState) {
-            final AccountSettings settings = new AccountSettings(getActivity(), (Account)getArguments().getParcelable(KEY_ACCOUNT));
+			final AccountSettings settings;
+
+			try {
+				settings = new AccountSettings(getActivity(), (Account)getArguments().getParcelable(Constants.EXTRA_KEY_ACCOUNT));
+			} catch(InvalidAccountException e) {
+				App.log.log(Level.INFO, "Account is invalid or doesn't exist (anymore)", e);
+				getActivity().finish();
+				return null;
+			}
+
             return new AlertDialog.Builder(getActivity())
                     .setTitle(R.string.settings_security_warning)
                     .setIcon(android.R.drawable.ic_dialog_alert)
@@ -215,7 +254,7 @@ public class AccountFragment extends PreferenceFragment {
         }
 
         private void refresh() {
-            AccountFragment fragment = (AccountFragment)getActivity().getFragmentManager().findFragmentByTag(SettingsActivity.TAG_ACCOUNT_SETTINGS);
+            AccountFragment fragment = (AccountFragment)getActivity().getFragmentManager().findFragmentByTag(AccountActivity.TAG_ACCOUNT_SETTINGS);
             if (fragment != null)
                 fragment.refresh();
         }

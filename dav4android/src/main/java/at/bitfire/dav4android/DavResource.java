@@ -10,17 +10,6 @@ package at.bitfire.dav4android;
 
 import android.text.TextUtils;
 
-import com.squareup.okhttp.HttpUrl;
-import com.squareup.okhttp.MediaType;
-import com.squareup.okhttp.OkHttpClient;
-import com.squareup.okhttp.Protocol;
-import com.squareup.okhttp.Request;
-import com.squareup.okhttp.RequestBody;
-import com.squareup.okhttp.Response;
-import com.squareup.okhttp.ResponseBody;
-import com.squareup.okhttp.internal.http.StatusLine;
-
-import org.slf4j.Logger;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlSerializer;
@@ -33,6 +22,8 @@ import java.net.ProtocolException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import at.bitfire.dav4android.exception.ConflictException;
 import at.bitfire.dav4android.exception.DavException;
@@ -48,6 +39,17 @@ import at.bitfire.dav4android.property.GetETag;
 import at.bitfire.dav4android.property.ResourceType;
 import lombok.Cleanup;
 import lombok.NonNull;
+import okhttp3.HttpUrl;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
+import okhttp3.internal.http.StatusLine;
+
+import com.zui.davdroid.common.LoggingReader;
 
 public class DavResource {
 
@@ -67,18 +69,23 @@ public class DavResource {
 
     /**
      * Creates a new DavResource which represents a WebDAV resource at the given location.
-     * @param log           #{@link Logger} which will be used for logging, or null for default
      * @param httpClient    #{@link OkHttpClient} to access this object
      * @param location      location of the WebDAV resource
+     * @param log           #{@link Logger} which will be used for logging, or null for default
      */
-    public DavResource(Logger log, OkHttpClient httpClient, HttpUrl location) {
-        this.log = log != null ? log : Constants.log;
+    public DavResource(@NonNull OkHttpClient httpClient, @NonNull HttpUrl location, @NonNull Logger log) {
+        this.log = log;
         this.httpClient = httpClient;
         this.location = location;
 
         // Don't follow redirects (only useful for GET/POST).
         // This means we have to handle 30x responses manually.
-        httpClient.setFollowRedirects(false);
+        if (httpClient.followRedirects())
+            throw new IllegalArgumentException("httpClient must not follow redirects automatically");
+    }
+
+    public DavResource(@NonNull OkHttpClient httpClient, @NonNull HttpUrl location) {
+        this(httpClient, location, Constants.log);
     }
 
 
@@ -98,22 +105,37 @@ public class DavResource {
 
         Response response = httpClient.newCall(new Request.Builder()
                 .method("OPTIONS", null)
+                .header("Content-Length", "0")      // workaround for https://github.com/square/okhttp/issues/2892
                 .url(location)
                 .build()).execute();
-        checkStatus(response);
+        checkStatus(response, true);
 
-        String dav = response.header("DAV");
-        if (dav != null)
-            for (String capability : TextUtils.split(dav, ","))
-                capabilities.add(capability.trim());
+        for (String capability : HttpUtils.listHeader(response, "DAV"))
+            capabilities.add(capability.trim());
     }
 
+    public void mkCol(String xmlBody) throws IOException, HttpException {
+        RequestBody rqBody = (xmlBody != null) ? RequestBody.create(MIME_XML, xmlBody) : null;
+
+        Response response = null;
+        for (int attempt = 0; attempt < MAX_REDIRECTS; attempt++) {
+            response = httpClient.newCall(new Request.Builder()
+                    .method("MKCOL", rqBody)
+                    .url(location)
+                    .build()).execute();
+            if (response.isRedirect())
+                processRedirection(response);
+            else
+                break;
+        }
+        checkStatus(response, true);
+    }
 
     /**
      * Sends a GET request to the resource. Note that this method expects the server to
      * return an ETag (which is required for CalDAV and CardDAV, but not for WebDAV in general).
      * @param accept    content of Accept header (must not be null, but may be &#42;&#47;* )
-     * @return          response body
+     * @return          response body (has to be closed by caller)
      * @throws DavException    on WebDAV errors, or when the response doesn't contain an ETag
      */
     public ResponseBody get(@NonNull String accept) throws IOException, HttpException, DavException {
@@ -123,20 +145,20 @@ public class DavResource {
                     .get()
                     .url(location)
                     .header("Accept", accept)
+                    .header("Accept-Encoding", "identity")    // disable compression because it can change the ETag
                     .build()).execute();
             if (response.isRedirect())
                 processRedirection(response);
             else
                 break;
         }
-        checkStatus(response);
+        checkStatus(response, false);
 
         String eTag = response.header("ETag");
         if (TextUtils.isEmpty(eTag))
-            // CalDAV servers MUST return ETag on GET [https://tools.ietf.org/html/rfc4791#section-5.3.4]
-            // CardDAV servers MUST return ETag on GET [https://tools.ietf.org/html/rfc6352#section-6.3.2.3]
-            throw new DavException("Received GET response without ETag");
-        properties.put(GetETag.NAME, new GetETag(eTag));
+            properties.remove(GetETag.NAME);
+        else
+            properties.put(GetETag.NAME, new GetETag(eTag));
 
         ResponseBody body = response.body();
         if (body == null)
@@ -166,19 +188,20 @@ public class DavResource {
 
             if (ifMatchETag != null)
                 // only overwrite specific version
-                builder.header("If-Match", StringUtils.asQuotedString(ifMatchETag));
+                builder.header("If-Match", QuotedStringUtils.asQuotedString(ifMatchETag));
             if (ifNoneMatch)
                 // don't overwrite anything existing
                 builder.header("If-None-Match", "*");
 
             response = httpClient.newCall(builder.build()).execute();
+
             if (response.isRedirect()) {
                 processRedirection(response);
                 redirected = true;
             } else
                 break;
         }
-        checkStatus(response);
+        checkStatus(response, true);
 
         String eTag = response.header("ETag");
         if (TextUtils.isEmpty(eTag))
@@ -199,9 +222,17 @@ public class DavResource {
                 .delete()
                 .url(location);
         if (ifMatchETag != null)
-            builder.header("If-Match", StringUtils.asQuotedString(ifMatchETag));
+            builder.header("If-Match", QuotedStringUtils.asQuotedString(ifMatchETag));
         Response response = httpClient.newCall(builder.build()).execute();
-        checkStatus(response);
+        checkStatus(response, false);
+
+        if (response.code() == 207) {
+            /* If an error occurs deleting a member resource (a resource other than
+               the resource identified in the Request-URI), then the response can be
+               a 207 (Multi-Status). […] (RFC 4918 9.6.1. DELETE for Collections) */
+            throw new HttpException(response);
+        } else
+            closeBody(response);
     }
 
     /**
@@ -231,8 +262,7 @@ public class DavResource {
         serializer.endTag(XmlUtils.NS_WEBDAV, "propfind");
         serializer.endDocument();
 
-        // redirects must not followed automatically (as it may rewrite PROPFIND requests to GET requests)
-        httpClient.setFollowRedirects(false);
+        LoggingReader.dump("OUTPUT", writer.toString(), "location:" + location.toString());
 
         Response response = null;
         for (int attempt = 0; attempt < MAX_REDIRECTS; attempt++) {
@@ -247,7 +277,7 @@ public class DavResource {
                 break;
         }
 
-        checkStatus(response);
+        checkStatus(response, false);
         assertMultiStatus(response);
 
         if (depth > 0)
@@ -260,6 +290,17 @@ public class DavResource {
 
 
     // status handling
+
+    protected void checkStatus(Response response, boolean closeBody) throws HttpException {
+        checkStatus(response.code(), response.message(), response);
+
+        if (closeBody)
+            closeBody(response);
+    }
+
+    protected void checkStatus(StatusLine status) throws HttpException {
+        checkStatus(status.code, status.message, null);
+    }
 
     protected void checkStatus(int code, String message, Response response) throws HttpException {
         if (code/100 == 2)
@@ -282,20 +323,12 @@ public class DavResource {
         }
     }
 
-    protected void checkStatus(Response response) throws HttpException {
-        checkStatus(response.code(), response.message(), response);
-    }
-
-    protected void checkStatus(StatusLine status) throws HttpException {
-        checkStatus(status.code, status.message, null);
-    }
-
     protected void assertMultiStatus(Response response) throws DavException {
         if (response.code() != 207)
-            throw new InvalidDavResponseException("Expected 207 Multi-Status");
+            throw new InvalidDavResponseException("Expected 207 Multi-Status, got " + response.code() + " " + response.message());
 
         if (response.body() == null)
-            throw new InvalidDavResponseException("Received multi-status response without body");
+            throw new InvalidDavResponseException("Received 207 Multi-Status without body");
 
         MediaType mediaType = response.body().contentType();
         if (mediaType != null) {
@@ -303,7 +336,7 @@ public class DavResource {
                     !"xml".equals(mediaType.subtype()))
                 throw new InvalidDavResponseException("Received non-XML 207 Multi-Status");
         } else
-            log.warn("Received multi-status response without Content-Type, assuming XML");
+            log.warning("Received 207 Multi-Status without Content-Type, assuming XML");
     }
 
     void processRedirection(Response response) throws HttpException {
@@ -313,11 +346,18 @@ public class DavResource {
         if (href != null)
             target = location.resolve(href);
 
+        closeBody(response);
+
         if (target != null) {
-            log.debug("Received redirection, new location=" + target);
+            log.fine("Redirected, new location=" + target);
             location = target;
         } else
-            throw new HttpException("Received redirection without new location");
+            throw new HttpException("Redirected without new Location");
+    }
+
+    protected void closeBody(Response response) {
+        if (response != null && response.body() != null)
+            response.body().close();
     }
 
 
@@ -326,11 +366,7 @@ public class DavResource {
     protected void processMultiStatus(Reader reader) throws IOException, HttpException, DavException {
         XmlPullParser parser = XmlUtils.newPullParser();
         try {
-            if (LoggingReader.VERBOSE_LOGGING) {
-                parser.setInput(new LoggingReader(reader));
-            } else {
-                parser.setInput(reader);
-            }
+            parser.setInput(LoggingReader.getInstance(reader));
 
             boolean multiStatus = false;
 
@@ -410,7 +446,7 @@ public class DavResource {
                             try {
                                 status = StatusLine.parse(parser.nextText());
                             } catch(ProtocolException e) {
-                                log.warn("Invalid status line, treating as 500 Server Error");
+                                log.warning("Invalid status line, treating as 500 Server Error");
                                 status = new StatusLine(Protocol.HTTP_1_1, 500, "Invalid status line");
                             }
                             break;
@@ -427,7 +463,7 @@ public class DavResource {
         }
 
         if (href == null) {
-            log.warn("Ignoring <response> without valid <href>");
+            log.warning("Ignoring <response> without valid <href>");
             return;
         }
 
@@ -436,7 +472,7 @@ public class DavResource {
         if (type != null && type.types.contains(ResourceType.COLLECTION))
             href = UrlUtils.withTrailingSlash(href);
 
-        log.debug("Received <response> for " + href + ", status: " + status + ", properties: " + properties);
+        log.log(Level.FINE, "Received <response> for " + href, status != null ? status : properties);
 
         if (status != null)
             // treat an HTTP error of a single response (i.e. requested resource or a member) like an HTTP error of the requested resource
@@ -470,7 +506,7 @@ public class DavResource {
                 }
 
                 if (sameBasePath)
-                    members.add(target = new DavResource(log, httpClient, href));
+                    members.add(target = new DavResource(httpClient, href, log));
             }
         }
 
@@ -478,7 +514,7 @@ public class DavResource {
         if (target != null)
             target.properties.merge(properties, true);
         else
-            log.warn("Received <response> not for self and not for member resource");
+            log.warning("Received <response> not for self and not for member resource");
     }
 
     private PropertyCollection parseMultiStatus_PropStat(XmlPullParser parser) throws IOException, XmlPullParserException {
@@ -501,7 +537,7 @@ public class DavResource {
                             try {
                                 status = StatusLine.parse(parser.nextText());
                             } catch(ProtocolException e) {
-                                log.warn("Invalid status line, treating as 500 Server Error");
+                                log.warning("Invalid status line, treating as 500 Server Error");
                                 status = new StatusLine(Protocol.HTTP_1_1, 500, "Invalid status line");
                             }
                     }
@@ -509,7 +545,7 @@ public class DavResource {
             eventType = parser.next();
         }
 
-        if (status != null && status.code/100 != 2)
+        if (prop != null && status != null && status.code/100 != 2)
             // not successful, null out property values so that they can be removed when merging in parseMultiStatus_Response
             prop.nullAllValues();
 
@@ -530,7 +566,7 @@ public class DavResource {
                 if (property != null)
                     prop.put(name, property);
                 else
-                    log.debug("Ignoring unknown/unparseable property " + name);
+                    log.fine("Ignoring unknown property " + name);
             }
             eventType = parser.next();
         }

@@ -1,0 +1,92 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+  <!--common strings-->
+  <string name="help">說明</string>
+  <string name="next">繼續</string>
+  <string name="please_wait">請稍候</string>
+  <string name="send">發送</string>
+  <string name="skip">跳過</string>
+
+  <!--AddAccountActivity-->
+  <string name="login_user_name">使用者名稱</string>
+  <string name="login_password">密碼</string>
+
+  <string name="login_mi_id_label">小米ID/手機號碼</string>
+  <string name="login_server_name_hint">伺服器 my.webhost.com</string>
+  <string name="login_account_description_hint">請在這裡填寫描述</string>
+  <string name="login_label">登入</string>
+  <!--Settings activity-->
+  <string name="settings_title">設定</string>
+  <string name="settings_authentication">認證</string>
+  <string name="settings_username">使用者名稱</string>
+  <string name="settings_enter_username">輸入使用者名稱</string>
+  <string name="settings_password">密碼</string>
+  <string name="settings_password_summary">點按以修改密碼</string>
+  <string name="settings_enter_password">輸入密碼</string>
+  <string name="settings_sync">同步</string>
+  <string name="settings_sync_interval_contacts">通訊錄自動同步間隔</string>
+  <string name="settings_sync_summary_manually">手動同步</string>
+  <string name="settings_sync_summary_periodically" tools:ignore="PluralsCandidate">每 %d 分鐘或本機修改後</string>
+  <string name="settings_sync_summary_not_available">無法使用</string>
+  <string-array name="settings_sync_interval_seconds">
+    <item>-1</item>
+    <item>3600</item>
+    <item>7200</item>
+    <item>14400</item>
+    <item>86400</item>
+  </string-array>
+  <string-array name="settings_sync_interval_names">
+    <item>手動同步</item>
+    <item>每 1 小時</item>
+    <item>每 2 小時</item>
+    <item>每 4 小時</item>
+    <item>每 24 小時</item>
+  </string-array>
+  <string name="settings_debug">偵錯</string>
+  <string name="settings_security_warning">有安全隱患！</string>
+  <string name="settings_log_to_external_file">記錄日誌到檔案</string>
+  <string name="settings_log_to_external_file_confirmation">日誌檔將包括隱私資訊，可能會被其他應用程式讀取。使用後，請關閉日誌記錄並刪除日誌檔。</string>
+  <string name="settings_log_to_external_file_on">日誌路徑為 %s (當選項開啟時)</string>
+  <string name="settings_log_to_external_file_no_external_storage">外部儲存無法使用</string>
+  <string name="settings_log_to_external_file_off">日誌將寫入到 ADB</string>
+  <string name="settings_log_verbose">記錄完整日誌</string>
+  <string name="settings_log_verbose_on">記錄同步資訊和網路互動</string>
+  <string name="settings_log_verbose_off">只記錄同步資訊</string>
+  <string name="setup_login_failed">登錄失敗</string>
+  <string name="setup_login_network_error">請檢查網絡連接!</string>
+  <string name="setup_login_icloud_info_error">請檢查您的Apple ID和密碼!</string>
+  <string name="setup_login_mi_info_error">請檢查您的小米ID/手機號碼和密碼!</string>
+  <string name="setup_login_icloud_info_error_for_two_step">請檢查您的Apple ID和密碼！\n\n如果您已開啟了Apple ID的兩步驗證，請確保您已創建並輸入了正確的<a href="https://support.apple.com/zh-hk/HT204397">App專用密碼</a>。登入<a href="https://appleid.apple.com/hk">Apple ID賬號頁面</a>進行相關操作。</string>
+  <string name="setup_dialog_retry">重試</string>
+  <string name="setup_add_account">增加帳號</string>
+  <string name="setup_querying_server_icloud">正在登錄iCloud，請稍等…</string>
+  <string name="setup_querying_server_carddav">正在登錄CardDAV，請稍等…</string>
+  <!--sync errors and DebugInfoActivity-->
+  <string name="debug_info_title">偵錯資訊</string>
+  <string name="sync_error_permissions">ContactsDAV 權限</string>
+  <string name="sync_error_permissions_text">需要額外權限</string>
+  <string name="sync_error_calendar">行事曆同步失敗 (%s)</string>
+  <string name="sync_error_contacts">通訊錄同步失敗 (%s)</string>
+  <string name="sync_error">%s 時錯誤</string>
+  <string name="sync_error_http_dav">%s 時伺服器錯誤</string>
+  <string name="sync_error_local_storage">%s 時資料庫錯誤</string>
+  <string-array name="sync_error_phases">
+    <item>準備同步</item>
+    <item>要求功能清單</item>
+    <item>處理本機刪除項目</item>
+    <item>準備建立/修改項目</item>
+    <item>上傳建立/修改項目</item>
+    <item>檢查同步狀態</item>
+    <item>檢查本機資料</item>
+    <item>檢查遠端資料</item>
+    <item>比較本機和遠端資料</item>
+    <item>下載遠端資料</item>
+    <item>儲存同步狀態</item>
+  </string-array>
+  <string name="sync_error_unauthorized">使用者名稱或密碼錯誤</string>
+
+  <!-- Account -->
+  <string name="mi_account_name">小米帳號</string>
+
+  <string name="login_account_not_created">無法創建帳戶，您不能擁有兩個具有相同名稱的帳戶。</string>
+</resources>

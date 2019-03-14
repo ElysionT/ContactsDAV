@@ -1,13 +1,12 @@
 package at.bitfire.dav4android.property;
 
-import android.util.Log;
-
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.logging.Level;
 
 import at.bitfire.dav4android.Constants;
 import at.bitfire.dav4android.Property;
@@ -20,9 +19,10 @@ public class ResourceType implements Property {
     public static final Name NAME = new Name(XmlUtils.NS_WEBDAV, "resourcetype");
 
     public static final Name
-            COLLECTION = new Name(XmlUtils.NS_WEBDAV, "collection"),
-            ADDRESSBOOK = new Name(XmlUtils.NS_CARDDAV, "addressbook"),
-            CALENDAR = new Name(XmlUtils.NS_CALDAV, "calendar");
+            COLLECTION = new Name(XmlUtils.NS_WEBDAV, "collection"),    // WebDAV
+            PRINCIPAL = new Name(XmlUtils.NS_WEBDAV, "principal"),      // WebDAV ACL
+            ADDRESSBOOK = new Name(XmlUtils.NS_CARDDAV, "addressbook"), // CardDAV
+            CALENDAR = new Name(XmlUtils.NS_CALDAV, "calendar");        // CalDAV
 
     public final Set<Property.Name> types = new HashSet<>();
 
@@ -49,6 +49,8 @@ public class ResourceType implements Property {
                         Name typeName = new Name(parser.getNamespace(), parser.getName());
                         if (COLLECTION.equals(typeName))
                             typeName = COLLECTION;
+                        else if (PRINCIPAL.equals(typeName))
+                            typeName = PRINCIPAL;
                         else if (ADDRESSBOOK.equals(typeName))
                             typeName = ADDRESSBOOK;
                         else if (CALENDAR.equals(typeName))
@@ -59,7 +61,7 @@ public class ResourceType implements Property {
                     eventType = parser.next();
                 }
             } catch(XmlPullParserException|IOException e) {
-                Log.e(Constants.LOG_TAG, "Couldn't parse <resourcetype>", e);
+                Constants.log.log(Level.SEVERE, "Couldn't parse <resourcetype>", e);
                 return null;
             }
 

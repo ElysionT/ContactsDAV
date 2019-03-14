@@ -12,7 +12,6 @@
 
 package at.bitfire.ical4android;
 
-import android.annotation.TargetApi;
 import android.content.ContentProviderOperation;
 import android.content.ContentProviderOperation.Builder;
 import android.content.ContentUris;
@@ -26,14 +25,16 @@ import android.os.RemoteException;
 import android.provider.CalendarContract;
 import android.provider.CalendarContract.Attendees;
 import android.provider.CalendarContract.Events;
+import android.provider.CalendarContract.ExtendedProperties;
 import android.provider.CalendarContract.Reminders;
-import android.util.Log;
+import android.util.Base64;
 
 import net.fortuna.ical4j.model.Date;
 import net.fortuna.ical4j.model.DateTime;
 import net.fortuna.ical4j.model.Dur;
 import net.fortuna.ical4j.model.Parameter;
 import net.fortuna.ical4j.model.ParameterList;
+import net.fortuna.ical4j.model.Property;
 import net.fortuna.ical4j.model.PropertyList;
 import net.fortuna.ical4j.model.TimeZone;
 import net.fortuna.ical4j.model.component.VAlarm;
@@ -45,6 +46,8 @@ import net.fortuna.ical4j.model.parameter.Rsvp;
 import net.fortuna.ical4j.model.property.Action;
 import net.fortuna.ical4j.model.property.Attendee;
 import net.fortuna.ical4j.model.property.Description;
+import net.fortuna.ical4j.model.property.DtEnd;
+import net.fortuna.ical4j.model.property.DtStart;
 import net.fortuna.ical4j.model.property.Duration;
 import net.fortuna.ical4j.model.property.ExDate;
 import net.fortuna.ical4j.model.property.ExRule;
@@ -57,7 +60,12 @@ import net.fortuna.ical4j.util.TimeZones;
 
 import org.apache.commons.lang3.StringUtils;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.text.DateFormat;
@@ -65,6 +73,7 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.logging.Level;
 
 import lombok.Cleanup;
 import lombok.Getter;
@@ -77,7 +86,10 @@ import lombok.Getter;
  * in populateEvent() / buildEvent. Setting _ID and ORIGINAL_ID is not sufficient.
  */
 public abstract class AndroidEvent {
-    private static final String TAG = "ical4android.Event";
+
+    /** {@link ExtendedProperties#NAME} for unknown iCal properties */
+    public static final String EXT_UNKNOWN_PROPERTY = "unknown-property";
+    protected static final int MAX_UNKNOWN_PROPERTY_SIZE = 25000;
 
     final protected AndroidCalendar calendar;
 
@@ -120,10 +132,20 @@ public abstract class AndroidEvent {
                 for (Entity.NamedContentValues subValue : subValues) {
                     if (Attendees.CONTENT_URI.equals(subValue.uri))
                         populateAttendee(subValue.values);
-                    if (Reminders.CONTENT_URI.equals(subValue.uri))
+                    else if (Reminders.CONTENT_URI.equals(subValue.uri))
                         populateReminder(subValue.values);
+                    else if (CalendarContract.ExtendedProperties.CONTENT_URI.equals(subValue.uri))
+                        populateExtended(subValue.values);
                 }
                 populateExceptions();
+
+                /* remove ORGANIZER from all components if there are no attendees
+                   (i.e. this is not a group-scheduled calendar entity) */
+                if (event.attendees.isEmpty()) {
+                    event.organizer = null;
+                    for (Event exception : event.exceptions)
+                        exception.organizer = null;
+                }
 
 	            return event;
             } else
@@ -140,27 +162,33 @@ public abstract class AndroidEvent {
 
         final boolean allDay = values.getAsInteger(Events.ALL_DAY) != 0;
         final long tsStart = values.getAsLong(Events.DTSTART);
+        final Long tsEnd = values.getAsLong(Events.DTEND);
         final String duration = values.getAsString(Events.DURATION);
 
-        String tzId;
-        Long tsEnd = values.getAsLong(Events.DTEND);
         if (allDay) {
-            event.setDtStart(tsStart, null);
-            if (tsEnd == null) {
-                Dur dur = new Dur(duration);
-                java.util.Date dEnd = dur.getTime(new java.util.Date(tsStart));
-                tsEnd = dEnd.getTime();
-            }
-            event.setDtEnd(tsEnd, null);
+            // use DATE values
+            event.dtStart = new DtStart(new Date(tsStart));
+            if (tsEnd != null)
+                event.dtEnd = new DtEnd(new Date(tsEnd));
+            else if (duration != null)
+                event.duration = new Duration(new Dur(duration));
 
         } else {
-            // use the start time zone for the end time, too
-            // because apps like Samsung Planner allow the user to change "the" time zone but change the start time zone only
-            tzId = values.getAsString(Events.EVENT_TIMEZONE);
-            event.setDtStart(tsStart, tzId);
-            if (tsEnd != null)
-                event.setDtEnd(tsEnd, tzId);
-            else if (!StringUtils.isEmpty(duration))
+            // use DATE-TIME values
+            TimeZone tz = null;
+            String tzId = values.getAsString(Events.EVENT_TIMEZONE);
+            if (tzId != null)
+                tz = DateUtils.tzRegistry.getTimeZone(tzId);
+
+            DateTime start = new DateTime(tsStart);
+            start.setTimeZone(tz);
+            event.dtStart = new DtStart(start);
+
+            if (tsEnd != null) {
+                DateTime end = new DateTime(tsEnd);
+                end.setTimeZone(tz);
+                event.dtEnd = new DtEnd(end);
+            } else if (duration != null)
                 event.duration = new Duration(new Dur(duration));
         }
 
@@ -173,7 +201,7 @@ public abstract class AndroidEvent {
             String strRDate = values.getAsString(Events.RDATE);
             if (!StringUtils.isEmpty(strRDate)) {
                 RDate rDate = (RDate)DateUtils.androidStringToRecurrenceSet(strRDate, RDate.class, allDay);
-                event.getRDates().add(rDate);
+                event.rDates.add(rDate);
             }
 
             String strExRule = values.getAsString(Events.EXRULE);
@@ -186,28 +214,12 @@ public abstract class AndroidEvent {
             String strExDate = values.getAsString(Events.EXDATE);
             if (!StringUtils.isEmpty(strExDate)) {
                 ExDate exDate = (ExDate)DateUtils.androidStringToRecurrenceSet(strExDate, ExDate.class, allDay);
-                event.getExDates().add(exDate);
+                event.exDates.add(exDate);
             }
         } catch (ParseException ex) {
-            Log.w(TAG, "Couldn't parse recurrence rules, ignoring", ex);
+            Constants.log.log(Level.WARNING, "Couldn't parse recurrence rules, ignoring", ex);
         } catch (IllegalArgumentException ex) {
-            Log.w(TAG, "Invalid recurrence rules, ignoring", ex);
-        }
-
-        if (values.containsKey(Events.ORIGINAL_INSTANCE_TIME)) {
-            // this event is an exception of a recurring event
-            long originalInstanceTime = values.getAsLong(Events.ORIGINAL_INSTANCE_TIME);
-
-            boolean originalAllDay = false;
-            if (values.containsKey(Events.ORIGINAL_ALL_DAY))
-                originalAllDay = values.getAsInteger(Events.ORIGINAL_ALL_DAY) != 0;
-
-            Date originalDate = originalAllDay ?
-                    new Date(originalInstanceTime) :
-                    new DateTime(originalInstanceTime);
-            if (originalDate instanceof DateTime)
-                ((DateTime)originalDate).setUtc(true);
-            event.recurrenceId = new RecurrenceId(originalDate);
+            Constants.log.log(Level.WARNING, "Invalid recurrence rules, ignoring", ex);
         }
 
         // status
@@ -231,21 +243,39 @@ public abstract class AndroidEvent {
             try {
                 event.organizer = new Organizer(new URI("mailto", values.getAsString(Events.ORGANIZER), null));
             } catch (URISyntaxException ex) {
-                Log.e(TAG, "Error when creating ORGANIZER mailto URI, ignoring", ex);
+                Constants.log.log(Level.WARNING, "Error when creating ORGANIZER mailto URI, ignoring", ex);
             }
 
         // classification
         switch (values.getAsInteger(Events.ACCESS_LEVEL)) {
-            case Events.ACCESS_CONFIDENTIAL:
+            case Events.ACCESS_PUBLIC:
+                event.forPublic = true;
+                break;
             case Events.ACCESS_PRIVATE:
                 event.forPublic = false;
                 break;
-            case Events.ACCESS_PUBLIC:
-                event.forPublic = true;
+            /*default:
+                event.forPublic = null;*/
+        }
+
+        // exceptions from recurring events
+        if (values.containsKey(Events.ORIGINAL_INSTANCE_TIME)) {
+            // this event is an exception of a recurring event
+            long originalInstanceTime = values.getAsLong(Events.ORIGINAL_INSTANCE_TIME);
+
+            boolean originalAllDay = false;
+            if (values.containsKey(Events.ORIGINAL_ALL_DAY))
+                originalAllDay = values.getAsInteger(Events.ORIGINAL_ALL_DAY) != 0;
+
+            Date originalDate = originalAllDay ?
+                    new Date(originalInstanceTime) :
+                    new DateTime(originalInstanceTime);
+            if (originalDate instanceof DateTime)
+                ((DateTime)originalDate).setUtc(true);
+            event.recurrenceId = new RecurrenceId(originalDate);
         }
     }
 
-    @TargetApi(16)
     protected void populateAttendee(ContentValues values) {
         try {
             final Attendee attendee;
@@ -305,9 +335,9 @@ public abstract class AndroidEvent {
                     break;
             }
 
-            event.getAttendees().add(attendee);
+            event.attendees.add(attendee);
         } catch (URISyntaxException ex) {
-            Log.e(TAG, "Couldn't parse attendee information, ignoring", ex);
+            Constants.log.log(Level.WARNING, "Couldn't parse attendee information, ignoring", ex);
         }
     }
 
@@ -315,9 +345,35 @@ public abstract class AndroidEvent {
         VAlarm alarm = new VAlarm(new Dur(0, 0, -row.getAsInteger(Reminders.MINUTES), 0));
 
         PropertyList props = alarm.getProperties();
-        props.add(Action.DISPLAY);
+        switch (row.getAsInteger(Reminders.METHOD)) {
+            case Reminders.METHOD_ALARM:
+            case Reminders.METHOD_ALERT:
+                props.add(Action.DISPLAY);
+                break;
+            case Reminders.METHOD_EMAIL:
+            case Reminders.METHOD_SMS:
+                props.add(Action.EMAIL);
+                break;
+            default:
+                // show alarm by default
+                props.add(Action.DISPLAY);
+        }
         props.add(new Description(event.summary));
-        event.getAlarms().add(alarm);
+        event.alarms.add(alarm);
+    }
+
+    protected void populateExtended(ContentValues row) {
+        if (EXT_UNKNOWN_PROPERTY.equals(row.getAsString(ExtendedProperties.NAME))) {
+            // de-serialize unknown property
+            ByteArrayInputStream bais = new ByteArrayInputStream(Base64.decode(row.getAsString(ExtendedProperties.VALUE), Base64.NO_WRAP));
+            try {
+                @Cleanup ObjectInputStream ois = new ObjectInputStream(bais);
+                Property property = (Property)ois.readObject();
+                event.unknownProperties.add(property);
+            } catch(IOException|ClassNotFoundException e) {
+                Constants.log.log(Level.WARNING, "Couldn't de-serialize unknown property", e);
+            }
+        }
     }
 
     @SuppressWarnings("Recycle")
@@ -329,9 +385,14 @@ public abstract class AndroidEvent {
             long exceptionId = c.getLong(0);
             try {
                 AndroidEvent exception = calendar.eventFactory.newInstance(calendar, exceptionId, null);
-                event.getExceptions().add(exception.getEvent());
+
+                // make sure that all components have the same ORGANIZER [RFC 6638 3.1]
+                Event exceptionEvent = exception.getEvent();
+                exceptionEvent.organizer = getEvent().organizer;
+
+                event.exceptions.add(exceptionEvent);
             } catch (CalendarStorageException e) {
-                Log.e(TAG, "Couldn't find exception details, ignoring", e);
+                Constants.log.log(Level.WARNING, "Couldn't find exception details, ignoring", e);
             }
         }
     }
@@ -353,18 +414,22 @@ public abstract class AndroidEvent {
 
         final int idxEvent = batch.nextBackrefIdx();
         buildEvent(null, builder);
-        batch.enqueue(builder.build());
+        batch.enqueue(new BatchOperation.Operation(builder));
 
         // add reminders
-        for (VAlarm alarm : event.getAlarms())
+        for (VAlarm alarm : event.alarms)
             insertReminder(batch, idxEvent, alarm);
 
         // add attendees
-        for (Attendee attendee : event.getAttendees())
+        for (Attendee attendee : event.attendees)
             insertAttendee(batch, idxEvent, attendee);
 
+        // add unknown properties
+        for (Property unknown : event.unknownProperties)
+            insertUnknownProperty(batch, idxEvent, unknown);
+
         // add exceptions
-        for (Event exception : event.getExceptions()) {
+        for (Event exception : event.exceptions) {
             /* I guess exceptions should be inserted using Events.CONTENT_EXCEPTION_URI so that we could
                benefit from some provider logic (for recurring exceptions e.g.). However, this method
                has some caveats:
@@ -390,22 +455,21 @@ public abstract class AndroidEvent {
                 try {
                     date = new Date(dateString);
                 } catch (ParseException e) {
-                    Log.e(TAG, "Couldn't parse DATE part of DATE-TIME RECURRENCE-ID", e);
+                    Constants.log.log(Level.WARNING, "Couldn't parse DATE part of DATE-TIME RECURRENCE-ID", e);
                 }
             }
-            builder .withValueBackReference(Events.ORIGINAL_ID, idxEvent)
-                    .withValue(Events.ORIGINAL_ALL_DAY, event.isAllDay() ? 1 : 0)
+            builder .withValue(Events.ORIGINAL_ALL_DAY, event.isAllDay() ? 1 : 0)
                     .withValue(Events.ORIGINAL_INSTANCE_TIME, date.getTime());
 
             int idxException = batch.nextBackrefIdx();
-            batch.enqueue(builder.build());
+            batch.enqueue(new BatchOperation.Operation(builder, Events.ORIGINAL_ID, idxEvent));
 
             // add exception reminders
-            for (VAlarm alarm : exception.getAlarms())
+            for (VAlarm alarm : exception.alarms)
                 insertReminder(batch, idxException, alarm);
 
             // add exception attendees
-            for (Attendee attendee : exception.getAttendees())
+            for (Attendee attendee : exception.attendees)
                 insertAttendee(batch, idxException, attendee);
         }
 
@@ -436,12 +500,11 @@ public abstract class AndroidEvent {
 
     protected void delete(BatchOperation batch) {
         // remove event
-        batch.enqueue(ContentProviderOperation.newDelete(eventSyncURI()).build());
+        batch.enqueue(new BatchOperation.Operation(ContentProviderOperation.newDelete(eventSyncURI())));
 
         // remove exceptions of that event, too (CalendarProvider doesn't do this)
-        batch.enqueue(ContentProviderOperation.newDelete(eventsSyncURI())
-                .withSelection(Events.ORIGINAL_ID + "=?", new String[] { String.valueOf(id) })
-                .build());
+        batch.enqueue(new BatchOperation.Operation(ContentProviderOperation.newDelete(eventsSyncURI())
+                .withSelection(Events.ORIGINAL_ID + "=?", new String[] { String.valueOf(id) })));
     }
 
     protected void buildEvent(Event recurrence, Builder builder) {
@@ -450,17 +513,30 @@ public abstract class AndroidEvent {
 
         builder .withValue(Events.CALENDAR_ID, calendar.getId())
                 .withValue(Events.ALL_DAY, event.isAllDay() ? 1 : 0)
-                .withValue(Events.DTSTART, event.getDtStartInMillis())
+                .withValue(Events.DTSTART, event.dtStart.getDate().getTime())
                 .withValue(Events.EVENT_TIMEZONE, event.getDtStartTzID())
                 .withValue(Events.HAS_ATTENDEE_DATA, 1 /* we know information about all attendees and not only ourselves */);
 
-        // all-day events and "events on that day" must have a duration (set to one day if zero or missing)
-        if (event.isAllDay() && !event.dtEnd.getDate().after(event.dtStart.getDate())) {
-            Log.w(TAG, "Changing all-day event for Android compatibility: setting DTEND := DTSTART+1");
+        /* For cases where a "VEVENT" calendar component
+           specifies a "DTSTART" property with a DATE value type but no
+           "DTEND" nor "DURATION" property, the event's duration is taken to
+           be one day. [RFC 5545 3.6.1] */
+        if (event.isAllDay() && (event.dtEnd == null || !event.dtEnd.getDate().after(event.dtStart.getDate()))) {
+            // ical4j is not set to use floating times, so DATEs are UTC times internally
+            Constants.log.log(Level.INFO, "Changing all-day event for Android compatibility: dtend := dtstart + 1 day");
             java.util.Calendar c = java.util.Calendar.getInstance(TimeZone.getTimeZone(TimeZones.UTC_ID));
             c.setTime(event.dtStart.getDate());
             c.add(java.util.Calendar.DATE, 1);
-            event.dtEnd.setDate(new Date(c.getTimeInMillis()));
+            event.dtEnd = new DtEnd(new Date(c.getTimeInMillis()));
+        }
+
+        /* For cases where a "VEVENT" calendar component
+           specifies a "DTSTART" property with a DATE-TIME value type but no
+           "DTEND" property, the event ends on the same calendar date and
+           time of day specified by the "DTSTART" property. [RFC 5545 3.6.1] */
+        else if (event.dtEnd == null || event.dtEnd.getDate().getTime() < event.dtStart.getDate().getTime()) {
+            Constants.log.info("Event without duration, setting dtend := dtstart");
+            event.dtEnd = new DtEnd(event.dtStart.getDate());
         }
 
         boolean recurring = false;
@@ -468,31 +544,33 @@ public abstract class AndroidEvent {
             recurring = true;
             builder.withValue(Events.RRULE, event.rRule.getValue());
         }
-        if (!event.getRDates().isEmpty()) {
+        if (!event.rDates.isEmpty()) {
             recurring = true;
             try {
-                builder.withValue(Events.RDATE, DateUtils.recurrenceSetsToAndroidString(event.getRDates(), event.isAllDay()));
+                builder.withValue(Events.RDATE, DateUtils.recurrenceSetsToAndroidString(event.rDates, event.isAllDay()));
             } catch (ParseException e) {
-                Log.e(TAG, "Couldn't parse RDate(s)", e);
+                Constants.log.log(Level.WARNING, "Couldn't parse RDate(s)", e);
             }
         }
         if (event.exRule != null)
             builder.withValue(Events.EXRULE, event.exRule.getValue());
-        if (!event.getExDates().isEmpty())
+        if (!event.exDates.isEmpty())
             try {
-                builder.withValue(Events.EXDATE, DateUtils.recurrenceSetsToAndroidString(event.getExDates(), event.isAllDay()));
+                builder.withValue(Events.EXDATE, DateUtils.recurrenceSetsToAndroidString(event.exDates, event.isAllDay()));
             } catch (ParseException e) {
-                Log.e(TAG, "Couldn't parse ExDate(s)", e);
+                Constants.log.log(Level.WARNING, "Couldn't parse ExDate(s)", e);
             }
 
         // set either DTEND for single-time events or DURATION for recurring events
         // because that's the way Android likes it
         if (recurring) {
             // calculate DURATION from start and end date
-            Duration duration = new Duration(event.dtStart.getDate(), event.dtEnd.getDate());
-            builder.withValue(Events.DURATION, duration.getValue());
+            Duration duration = (event.duration != null) ?
+                    event.duration :
+                    new Duration(event.dtStart.getDate(), event.dtEnd.getDate());
+            builder .withValue(Events.DURATION, duration.getValue());
         } else
-            builder .withValue(Events.DTEND, event.getDtEndInMillis())
+            builder .withValue(Events.DTEND, event.dtEnd.getDate().getTime())
                     .withValue(Events.EVENT_END_TIMEZONE, event.getDtEndTzID());
 
         if (event.summary != null)
@@ -515,7 +593,7 @@ public abstract class AndroidEvent {
             if (email != null)
                 builder.withValue(Events.ORGANIZER, email);
             else
-                Log.w(TAG, "Got ORGANIZER without email address which is not supported by Android, ignoring");
+                Constants.log.warning("Got ORGANIZER without email address which is not supported by Android, ignoring");
         }
 
         if (event.status != null) {
@@ -531,24 +609,34 @@ public abstract class AndroidEvent {
 
         if (event.forPublic != null)
             builder.withValue(Events.ACCESS_LEVEL, event.forPublic ? Events.ACCESS_PUBLIC : Events.ACCESS_PRIVATE);
+
+        Constants.log.log(Level.FINE, "Built event object", builder.build());
     }
 
     protected void insertReminder(BatchOperation batch, int idxEvent, VAlarm alarm) {
         Builder builder = ContentProviderOperation.newInsert(calendar.syncAdapterURI(Reminders.CONTENT_URI));
-        builder.withValueBackReference(Reminders.EVENT_ID, idxEvent);
 
-        int minutes = iCalendar.alarmMinBefore(alarm);
-        builder .withValue(Reminders.METHOD, Reminders.METHOD_ALERT)
+        final Action action = alarm.getAction();
+        final int method;
+        if (action == null ||                   // (required) ACTION not set, assume DISPLAY
+            Action.DISPLAY.equals(action) ||    // alarm should be shown on display
+            Action.AUDIO.equals(action))        // alarm should play some sound
+            method = Reminders.METHOD_ALERT;
+        else if (Action.EMAIL.equals(action))
+            method = Reminders.METHOD_EMAIL;
+        else
+            method = Reminders.METHOD_DEFAULT;
+
+        final int minutes = iCalendar.alarmMinBefore(alarm);
+        builder .withValue(Reminders.METHOD, method)
                 .withValue(Reminders.MINUTES, minutes);
 
-        Log.d(TAG, "Adding alarm " + minutes + " minutes before event");
-        batch.enqueue(builder.build());
+        Constants.log.fine("Adding alarm " + minutes + " minutes before event, method: " + method);
+        batch.enqueue(new BatchOperation.Operation(builder, Reminders.EVENT_ID, idxEvent));
     }
 
-    @TargetApi(16)
     protected void insertAttendee(BatchOperation batch, int idxEvent, Attendee attendee) {
         Builder builder = ContentProviderOperation.newInsert(calendar.syncAdapterURI(Attendees.CONTENT_URI));
-        builder.withValueBackReference(Attendees.EVENT_ID, idxEvent);
 
         final URI member = attendee.getCalAddress();
         if ("mailto".equalsIgnoreCase(member.getScheme()))
@@ -604,7 +692,28 @@ public abstract class AndroidEvent {
         builder .withValue(Attendees.ATTENDEE_TYPE, type)
                 .withValue(Attendees.ATTENDEE_STATUS, status);
 
-        batch.enqueue(builder.build());
+        batch.enqueue(new BatchOperation.Operation(builder, Attendees.EVENT_ID, idxEvent));
+    }
+
+    protected void insertUnknownProperty(BatchOperation batch, int idxEvent, Property property) {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try {
+            @Cleanup ObjectOutputStream oos = new ObjectOutputStream(baos);
+            oos.writeObject(property);
+
+            if (baos.size() > MAX_UNKNOWN_PROPERTY_SIZE) {
+                Constants.log.warning("Ignoring unknown property with " + baos.size() + " octets");
+                return;
+            }
+
+            Builder builder = ContentProviderOperation.newInsert(calendar.syncAdapterURI(ExtendedProperties.CONTENT_URI));
+            builder .withValue(ExtendedProperties.NAME, EXT_UNKNOWN_PROPERTY)
+                    .withValue(ExtendedProperties.VALUE, Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP));
+
+            batch.enqueue(new BatchOperation.Operation(builder, ExtendedProperties.EVENT_ID, idxEvent));
+        } catch(IOException e) {
+            Constants.log.log(Level.WARNING, "Couldn't serialize unknown property", e);
+        }
     }
 
 
